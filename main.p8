@@ -2,12 +2,12 @@ pico-8 cartridge // http://www.pico-8.com
 version 36
 __lua__
 -- main
-g = {}
-g.upd = mmenu_upd
-g.drw = mmenu_drw
+g = {} -- games state
+c = {} -- config
 
 function _init()
- mmenu_ini()
+ -- mmenu_ini()
+ cmbt_ini()
 end
 
 function _update()
@@ -72,68 +72,75 @@ end
 -->8
 -- combat
 function render_path(pc)
+ if #pc.tail == 0 then
+  return
+ end
  for p in all(pc.tail) do
-  x0 = p[1]*8-1
-  y0 = p[2]*8
+  local x0 = p[1]*8-1
+  local y0 = p[2]*8
   rect(x0,y0,x0+8,y0+8,8)
  end
 end
 
 function end_turn(pc)
- player_turn = player_turn % 2 + 1
+ c.player_turn = c.player_turn % 2 + 1
  pc.tail = {}
- pc.mvmt = 30
 end
 
 function move_pc(pc,di,dj)
- nxt = {pc.i+di,
+ local nxt = {pc.i+di,
         pc.j+dj}
  
- nw_tail = {}
+ local nw_tail = {}
  for p in all(pc.tail) do
   if nxt[1]==p[1] and
      nxt[2]==p[2] then
    break
   end
-  nw_tail[#nw_tail+1] = p
+  add(nw_tail, p)
  end
  -- if the tail is growing
  -- then add our current pos
  -- as the end of the tail
  if #nw_tail >= #pc.tail then
-  nw_tail[#nw_tail+1] = {pc.i,
-                         pc.j}
+  add(nw_tail, {pc.i, pc.j})
  end
 
- nw_mvmt = 30 - 5*#nw_tail
- 
  -- if open and we have 
  -- movement we can move there 
  if mget(nxt[1],nxt[2]) == 2 and
-    nw_mvmt >= 0 then
+    (pc.mvmt-#nw_tail) >= 0 then
   pc.i = nxt[1]
   pc.j = nxt[2]
   pc.tail = nw_tail
-  pc.mvmt = nw_mvmt
  end
-
 end
 
 function cmbt_ini()
- cls()
- players = {}
- pc = { i=4, j=4, mvmt=30, tail={}, sp=1}
- add(players,pc)
- pc = { i = 8, j = 4, mvmt=30, tail={}, sp=6}
- add(players,pc)
- num_turns = #players
- player_turn = 1
  g.upd = cmbt_upd
  g.drw = cmbt_drw
+
+ c.players = {}
+ local pc = {
+  i=4, 
+  j=4, 
+  mvmt=8, 
+  tail={}, 
+  sp=1}
+ add(c.players,pc)
+ local pc = { 
+  i = 8, 
+  j = 4, 
+  mvmt=6, 
+  tail={}, 
+  sp=6}
+ add(c.players,pc)
+ c.num_turns = #c.players
+ c.player_turn = 1
 end
 
 function cmbt_upd()
- pc = players[player_turn]
+ local pc = c.players[c.player_turn]
  if (btnp(⬅️)) move_pc(pc,-1, 0)
  if (btnp(➡️)) move_pc(pc, 1, 0)
  if (btnp(⬆️)) move_pc(pc, 0,-1)
@@ -144,13 +151,14 @@ end
 function cmbt_drw()
  cls()
  map()
- for pc in all(players) do
+ for pc in all(c.players) do
   spr(pc.sp,pc.i*8,pc.j*8)
  end
  color(8)
- print(player_turn)
- render_path(players[player_turn])
- print(pc.mvmt)
+ local pc = c.players[c.player_turn]
+ print(c.player_turn)
+ render_path(pc)
+ print(5*(pc.mvmt-#pc.tail))
 end
 -->8
 -- credits
