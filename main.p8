@@ -1,7 +1,7 @@
 pico-8 cartridge // http://www.pico-8.com
 version 36
 __lua__
-function render_path(pc)
+function render_tail(pc)
 	for p in all(pc.tail) do
 		x0 = p[1]*8-1
 		y0 = p[2]*8
@@ -12,7 +12,6 @@ end
 function end_turn(pc)
 	player_turn = player_turn % 2 + 1
 	pc.tail = {}
-	pc.mvmt = 30
 end
 
 function move_pc(pc,di,dj)
@@ -25,36 +24,41 @@ function move_pc(pc,di,dj)
      nxt[2]==p[2] then
    break
   end
-  nw_tail[#nw_tail+1] = p
+		add(nw_tail, p)
  end
  -- if the tail is growing
  -- then add our current pos
  -- as the end of the tail
  if #nw_tail >= #pc.tail then
-  nw_tail[#nw_tail+1] = {pc.i,
-  				                   pc.j}
+		add(nw_tail, {pc.i, pc.j})
  end
 
- nw_mvmt = 30 - 5*#nw_tail
- 
 	-- if open and we have 
 	-- movement we can move there	
 	if mget(nxt[1],nxt[2]) == 2 and
-	   nw_mvmt >= 0 then
+	   (pc.mvmt-#nw_tail) >= 0 then
 		pc.i = nxt[1]
 		pc.j = nxt[2]
 		pc.tail = nw_tail
-  pc.mvmt = nw_mvmt
 	end
-
 end
 
 function _init()
  cls()
 	players = {}
- pc = { i=4, j=4, mvmt=30, tail={}, sp=1}
+ pc = {
+		i=4, 
+		j=4, 
+		mvmt=8, 
+		tail={}, 
+		sp=1}
 	add(players,pc)
-	pc = { i = 8, j = 4, mvmt=30, tail={}, sp=6}
+	pc = { 
+		i = 8, 
+		j = 4, 
+		mvmt=6, 
+		tail={}, 
+		sp=6}
 	add(players,pc)
 	num_turns = #players
 	player_turn = 1
@@ -77,8 +81,8 @@ function _draw()
 	end
 	color(8)
 	print(player_turn)
-	render_path(players[player_turn])
-	print(pc.mvmt)
+	render_tail(players[player_turn])
+	print(5*(pc.mvmt-#pc.tail))
 end
 __gfx__
 00000000000000006666666688888888000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
