@@ -1,6 +1,76 @@
 pico-8 cartridge // http://www.pico-8.com
 version 36
 __lua__
+-- main
+g = {}
+g.upd = mmenu_upd
+g.drw = mmenu_drw
+
+function _init()
+ mmenu_ini()
+end
+
+function _update()
+ g.upd()
+end
+
+function _draw()
+ g.drw()
+end
+-->8
+-- main menu
+
+function mmenu_ini()
+ g.upd = mmenu_upd
+ g.drw = mmenu_drw
+end
+
+function mmenu_upd()
+ if btn(🅾️) or btn(❎) then
+  ctscn_ini()
+ end
+end
+
+function mmenu_drw()
+ cls()
+ print("press 🅾️/❎ to start")
+end
+-->8
+-- cutscene/dialogue
+ctscn = {start=0}
+
+function ctscn_ini()
+ ctscn.start = time()
+ g.upd = ctscn_upd
+ g.drw = ctscn_drw
+end
+
+function ctscn_upd()
+ if time()-ctscn.start < 1 then
+  return
+ end
+ if time()-ctscn.start > 8 or
+    btn(❎) or btn(🅾️) then
+  cmbt_ini()
+ end
+end
+
+function ctscn_drw()
+ cls()
+ local t = time() - ctscn.start
+ local s = "hello"
+ if t > 1 then
+  s = s..sub("...",1,t-1)
+ end
+ if t > 5 then
+  s = s.." this is the end of the\nscene"
+ end
+ print(s)
+end
+-->8
+-- non-combat exploration
+-->8
+-- combat
 function render_path(pc)
  for p in all(pc.tail) do
   x0 = p[1]*8-1
@@ -49,7 +119,7 @@ function move_pc(pc,di,dj)
 
 end
 
-function _init()
+function cmbt_ini()
  cls()
  players = {}
  pc = { i=4, j=4, mvmt=30, tail={}, sp=1}
@@ -58,9 +128,11 @@ function _init()
  add(players,pc)
  num_turns = #players
  player_turn = 1
+ g.upd = cmbt_upd
+ g.drw = cmbt_drw
 end
 
-function _update()
+function cmbt_upd()
  pc = players[player_turn]
  if (btnp(⬅️)) move_pc(pc,-1, 0)
  if (btnp(➡️)) move_pc(pc, 1, 0)
@@ -69,7 +141,7 @@ function _update()
  if (btnp(4))  end_turn(pc)
 end
 
-function _draw()
+function cmbt_drw()
  cls()
  map()
  for pc in all(players) do
@@ -80,6 +152,8 @@ function _draw()
  render_path(players[player_turn])
  print(pc.mvmt)
 end
+-->8
+-- credits
 __gfx__
 00000000000000006666666688888888000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000000000c000c001111111600000008050005000400040007000700000000000000000000000000000000000000000000000000000000000000000000000000
