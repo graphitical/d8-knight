@@ -37,35 +37,147 @@ function mmenu_drw()
 end
 -->8
 -- cutscene/dialogue
-ctscn = {start=0}
+-- informs other functions if
+-- dialogue is active
+dia_active=false
+
+-- cutscene globals
+cts_start=0
+
+function dia_ini(frames)
+ -- dialogue globals
+ dia_fms = frames -- frame table
+ -- front-pop active frame
+ dia_f = deli(dia_fms,1)
+ -- parent update function
+ dia_p_upd = g.upd
+ -- parent draw function
+ dia_p_drw = g.drw
+ g.upd = dia_upd
+ g.drw = dia_drw
+ dia_ch = "" -- char buffer
+ dia_ch_i = 0 -- char index
+ dia_ch_t = 0 -- last char time
+ dia_ch_spd = 0.03 -- time/char
+ dia_active = true
+ -- waiting for button press to
+ -- continue
+ dia_paused = false 
+end
+
+function dia_upd()
+ dia_p_upd()
+ -- see if we're done printing
+ if dia_ch_i > #dia_f.txt then
+  dia_paused = true
+  -- button press to continue
+  if btnp(❎) or btnp(🅾️) then
+   -- if frame table is empty,
+   -- then the dialogue is done.
+   -- return to parent mode
+   if #dia_fms == 0 then
+    g.upd = dia_p_upd
+    g.drw = dia_p_drw
+    dia_active = false
+   -- else pop the next frame
+   else
+    dia_f = deli(dia_fms,1)
+    dia_ch = ""
+    dia_ch_i = 0
+    dia_ch_t = time()
+    dia_ch_spd = 0.03
+    dia_paused = false
+   end
+  end
+  return
+ end
+                    
+ -- increment char index, and if
+ -- button is pressed, skip
+ -- animation of characters
+ local c
+ while time() - dia_ch_t >
+    dia_ch_spd or 
+    btnp(❎) or btnp(🅾️) do
+  dia_ch_t = time()
+  repeat
+   dia_ch_i += 1
+   if dia_ch_i > #dia_f.txt then
+    return
+   end
+   c = sub(dia_f.txt,
+           dia_ch_i,_)
+   
+   -- handle control chars
+   if(c==">") dia_ch_spd = 0.03
+   if(c=="<") dia_ch_spd = 0.20
+  until #split("<>",c) == 1
+  --^ using split as a hacky way
+  -- to search for a character
+  -- in a string
+  
+  -- append latest printable
+  -- char to buffer
+  dia_ch = dia_ch..c
+ end
+ 
+end
+
+function dia_drw()
+ dia_p_drw()
+ 
+ -- draw background
+ rectfill(0, 112, 127, 127, 0)
+ local x = 0
+ if(dia_f.rgt) x=112
+ spr(dia_f.ico,
+     x, 112,
+     2, 2,
+     not dia_f.rgt)
+ x = 18
+ if(dia_f.rgt) x=2
+ print(dia_ch,
+       x, 114, 7)
+ 
+ if dia_paused then
+  x = 120
+  if(dia_f.rgt) x=105
+  print("🅾️", x, 123, 7)
+ end
+ 
+end
 
 function ctscn_ini()
- ctscn.start = time()
+ cts_start = time()
  g.upd = ctscn_upd
  g.drw = ctscn_drw
+ dia_ini(
+  {
+   {
+    txt = "got any uh<... \n>flakes?",
+    ico = 64,
+    rgt = false
+   },
+   {
+    txt = "you don't look anything\nlike how the town crier",
+    ico = 66,
+    rgt = true
+   },
+   {
+    txt = "described you in your ad!",
+    ico = 66,
+    rgt = true
+   },
+  })
 end
 
 function ctscn_upd()
- if time()-ctscn.start < 1 then
-  return
- end
- if time()-ctscn.start > 8 or
-    btn(❎) or btn(🅾️) then
-  cmbt_ini()
- end
+
 end
 
 function ctscn_drw()
  cls()
- local t = time() - ctscn.start
- local s = "hello"
- if t > 1 then
-  s = s..sub("...",1,t-1)
- end
- if t > 5 then
-  s = s.." this is the end of the\nscene"
- end
- print(s)
+ map()
 end
 -->8
 -- non-combat exploration
