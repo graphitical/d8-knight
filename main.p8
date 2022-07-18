@@ -121,6 +121,8 @@ end
 function cmbt_ini()
  g.upd = cmbt_upd
  g.drw = cmbt_drw
+ cmbt_state = 0
+ s = 0 -- Menu selector
 
  c.players = {}
  local pc = {
@@ -141,28 +143,68 @@ function cmbt_ini()
  c.player_turn = 1
 end
 
+function cmbt_menu(pc, s, cmbt_state)
+  local scrn_sz = 128;
+  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
+  rectfill(1, 87, 126, 126, 0)
+
+  local line_start = 90;
+  local line_delta = 10;
+
+  local cmds = {"move ("..5*(pc.mvmt-#pc.tail).."/"..5*pc.mvmt..")", "melee attack",
+    "ranged attack", "end turn"}
+  for i=1,4 do
+    print(cmds[i], 10, line_start+(i-1)*line_delta, 6)
+  end
+
+  if (cmbt_state != 0) then
+    rectfill(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
+  else
+    rect(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
+  end
+end
+
 function cmbt_upd()
  local pc = c.players[c.player_turn]
- if (btnp(⬅️)) move_pc(pc,-1, 0)
- if (btnp(➡️)) move_pc(pc, 1, 0)
- if (btnp(⬆️)) move_pc(pc, 0,-1)
- if (btnp(⬇️)) move_pc(pc, 0, 1)
- if (btnp(4))  end_turn(pc)
+ -- Menu select state
+  if cmbt_state == 0 then
+    if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
+    if (btnp(⬇️)) s = (s + 1) % 4
+    if (btnp(4)) then
+      cmbt_state = s + 1
+    end
+  -- Movement State
+  elseif cmbt_state == 1 then
+    if (btnp(⬅️)) move_pc(pc,-1, 0)
+    if (btnp(➡️)) move_pc(pc, 1, 0)
+    if (btnp(⬆️)) move_pc(pc, 0,-1)
+    if (btnp(⬇️)) move_pc(pc, 0, 1)
+    if (btnp(4)) cmbt_state = 0;
+  -- TODO: Attack states. Items?
+  elseif cmbt_state == 4 then
+    end_turn(pc)
+    cmbt_state = 0
+    s = 0
+  else
+    if (btnp(4)) cmbt_state = 0;
+  end
 end
 
 function cmbt_drw()
  cls()
  map()
+ -- Draw all PCs & NPCs
  for pc in all(c.players) do
   palt(0,false) -- keeps black eyes as black
   spr(pc.sp,pc.i*8,pc.j*8)
   palt()
  end
- color(8)
+ -- Focus on current PC
  local pc = c.players[c.player_turn]
- print(c.player_turn)
+ -- Draw combat menu
+ cmbt_menu(pc,s,cmbt_state)
+ color(8)
  render_path(pc)
- print(5*(pc.mvmt-#pc.tail))
 end
 -->8
 -- credits
