@@ -126,6 +126,7 @@ function cmbt_ini()
 
  c.players = {}
  local pc = {
+  name="blue bunny",
   i=4, 
   j=4, 
   mvmt=8, 
@@ -133,6 +134,7 @@ function cmbt_ini()
   sp=255}
  add(c.players,pc)
  local pc = { 
+  name = "brown bunny",
   i = 8, 
   j = 4, 
   mvmt=6, 
@@ -150,6 +152,8 @@ function cmbt_menu(pc, s, cmbt_state)
 
   local line_start = 90;
   local line_delta = 10;
+
+  print(pc.name, 10, 80, 6)
 
   local cmds = {"move ("..5*(pc.mvmt-#pc.tail).."/"..5*pc.mvmt..")", "melee attack",
     "ranged attack", "end turn"}
