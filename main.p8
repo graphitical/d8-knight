@@ -71,13 +71,13 @@ end
 -- non-combat exploration
 -->8
 -- combat
-function render_path(pc)
+function render_path(pc)  
  if #pc.tail == 0 then
   return
  end
- for p in all(pc.tail) do
-  local x0 = p[1]*8
-  local y0 = p[2]*8
+ for n=pc.bktrk+1,#pc.tail do
+  local x0 = pc.tail[n][1]*8
+  local y0 = pc.tail[n][2]*8
   rect(x0,y0,x0+7,y0+7,8)
  end
 end
@@ -85,6 +85,7 @@ end
 function end_turn(pc)
  c.player_turn = c.player_turn % 2 + 1
  pc.tail = {}
+ pc.bktrk = 0
 end
 
 function move_pc(pc,di,dj)
@@ -92,9 +93,12 @@ function move_pc(pc,di,dj)
         pc.j+dj}
  
  local nw_tail = {}
+ -- Rebuilding tail every time 
+ -- means we allow backtracking
  for p in all(pc.tail) do
   if nxt[1]==p[1] and
-     nxt[2]==p[2] then
+     nxt[2]==p[2] and
+     pc.bktrk == 0 then
    break
   end
   add(nw_tail, p)
@@ -131,6 +135,7 @@ function cmbt_ini()
   j=4, 
   mvmt=8, 
   tail={}, 
+  bktrk = 0,
   sp=255}
  add(c.players,pc)
  local pc = { 
@@ -139,6 +144,7 @@ function cmbt_ini()
   j = 4, 
   mvmt=6, 
   tail={}, 
+  bktrk = 0,
   sp=254}
  add(c.players,pc)
  c.num_turns = #c.players
@@ -185,6 +191,20 @@ function cmbt_upd()
     if (btnp(⬇️)) move_pc(pc, 0, 1)
     if (btnp(4)) cmbt_state = 0;
   -- TODO: Attack states. Items?
+  elseif cmbt_state == 2 then
+    -- Prevent backtracking if we've
+    -- already moved
+    if #pc.tail > 0 then
+      pc.bktrk = #pc.tail
+    end
+    if (btnp(4)) cmbt_state = 0;
+
+  elseif cmbt_state == 3 then
+    if #pc.tail > 0 then
+      pc.bktrk = #pc.tail
+    end
+    if (btnp(4)) cmbt_state = 0;
+
   elseif cmbt_state == 4 then
     end_turn(pc)
     cmbt_state = 0
@@ -202,13 +222,13 @@ function cmbt_drw()
   palt(0,false) -- keeps black eyes as black
   spr(pc.sp,pc.i*8,pc.j*8)
   palt()
+  render_path(pc)
  end
  -- Focus on current PC
  local pc = c.players[c.player_turn]
  -- Draw combat menu
  cmbt_menu(pc,s,cmbt_state)
  color(8)
- render_path(pc)
 end
 -->8
 -- credits
