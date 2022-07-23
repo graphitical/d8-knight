@@ -125,8 +125,9 @@ end
 function cmbt_ini()
  g.upd = cmbt_upd
  g.drw = cmbt_drw
- cmbt_state = 0
- s = 0 -- Menu selector
+ cmbt_states={init=0,menu=1,move=2,mattack=3,rattack=4,end_turn=5}
+ cmbt_state = cmbt_states.menu
+ s=0
 
  c.players = {}
  local pc = {
@@ -167,7 +168,7 @@ function cmbt_menu(pc, s, cmbt_state)
     print(cmds[i], 10, line_start+(i-1)*line_delta, 6)
   end
 
-  if (cmbt_state != 0) then
+  if (cmbt_state != cmbt_states.menu) then
     rectfill(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
   else
     rect(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
@@ -177,40 +178,31 @@ end
 function cmbt_upd()
  local pc = c.players[c.player_turn]
  -- Menu select state
-  if cmbt_state == 0 then
+  if cmbt_state == cmbt_states.menu then
     if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
     if (btnp(⬇️)) s = (s + 1) % 4
-    if (btnp(4)) then
-      cmbt_state = s + 1
-    end
+    if (btnp(4)) cmbt_state = s + 2
   -- Movement State
-  elseif cmbt_state == 1 then
+  elseif cmbt_state == cmbt_states.move then
     if (btnp(⬅️)) move_pc(pc,-1, 0)
     if (btnp(➡️)) move_pc(pc, 1, 0)
     if (btnp(⬆️)) move_pc(pc, 0,-1)
     if (btnp(⬇️)) move_pc(pc, 0, 1)
-    if (btnp(4)) cmbt_state = 0;
+    if (btnp(4)) cmbt_state = cmbt_states.menu
   -- TODO: Attack states. Items?
-  elseif cmbt_state == 2 then
+  elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
     -- Prevent backtracking if we've
     -- already moved
     if #pc.tail > 0 then
       pc.bktrk = #pc.tail
     end
-    if (btnp(4)) cmbt_state = 0;
-
-  elseif cmbt_state == 3 then
-    if #pc.tail > 0 then
-      pc.bktrk = #pc.tail
-    end
-    if (btnp(4)) cmbt_state = 0;
-
-  elseif cmbt_state == 4 then
+    if (btnp(4)) cmbt_state = cmbt_states.menu
+  elseif cmbt_state == cmbt_states.end_turn then
     end_turn(pc)
-    cmbt_state = 0
+    cmbt_state = cmbt_states.menu
     s = 0
   else
-    if (btnp(4)) cmbt_state = 0;
+    if (btnp(4)) cmbt_state = cmbt_states.menu
   end
 end
 
@@ -229,6 +221,7 @@ function cmbt_drw()
  -- Draw combat menu
  cmbt_menu(pc,s,cmbt_state)
  color(8)
+--  print(s)
 end
 -->8
 -- credits
