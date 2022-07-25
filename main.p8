@@ -4,13 +4,36 @@ __lua__
 -- main
 g = {} -- games state
 c = {} -- config
+T = 0
 
 function _init()
- -- mmenu_ini()
- cmbt_ini()
+  T = 0
+  c.players = {}
+  local pc = {
+    name="blue bunny",
+    i=4, 
+    j=4, 
+    mvmt=8, 
+    tail={}, 
+    bktrk = 0,
+    sp=255}
+    add(c.players,pc)
+    local pc = { 
+    name = "brown bunny",
+    i = 8, 
+    j = 4, 
+    mvmt=6, 
+    tail={}, 
+    bktrk = 0,
+    sp=254}
+
+  add(c.players,pc)
+
+  init_ini()
 end
 
 function _update()
+ T+=1
  g.upd()
 end
 
@@ -71,6 +94,21 @@ end
 -- non-combat exploration
 -->8
 -- combat
+function cmbt_ini()
+  g.upd = cmbt_upd
+  g.drw = cmbt_drw
+  cmbt_states={init=0,menu=1,move=2,mattack=3,rattack=4,end_turn=5}
+  --  cmbt_state = cmbt_states.menu
+  cmbt_state = cmbt_states.init
+  s=0
+  roll_val = 21
+  roll_time = 2
+  roll_count = 0
+
+  c.num_turns = #c.players
+  c.player_turn = 1
+end
+
 function render_path(pc)  
  if #pc.tail == 0 then
   return
@@ -120,37 +158,6 @@ function move_pc(pc,di,dj)
   pc.j = nxt[2]
   pc.tail = nw_tail
  end
-end
-
-function cmbt_ini()
- g.upd = cmbt_upd
- g.drw = cmbt_drw
- cmbt_states={init=0,menu=1,move=2,mattack=3,rattack=4,end_turn=5}
---  cmbt_state = cmbt_states.menu
- cmbt_state = cmbt_states.init
- s=0
-
- c.players = {}
- local pc = {
-  name="blue bunny",
-  i=4, 
-  j=4, 
-  mvmt=8, 
-  tail={}, 
-  bktrk = 0,
-  sp=255}
- add(c.players,pc)
- local pc = { 
-  name = "brown bunny",
-  i = 8, 
-  j = 4, 
-  mvmt=6, 
-  tail={}, 
-  bktrk = 0,
-  sp=254}
- add(c.players,pc)
- c.num_turns = #c.players
- c.player_turn = 1
 end
 
 function cmbt_menu(pc, s, cmbt_state)
@@ -207,13 +214,44 @@ function cmbt_upd()
   end
 end
 
+
+function upd_roll()
+
+end
+
 function roll_init()
-  local scrn_sz = 128;
-  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
-  rectfill(1, 87, 126, 126, 0)
-  spr(192,0,92,2,4)
-  spr(192,16,92,2,4,true)
-  print("21",13,109,8)
+
+
+  --     if T%10 == 0 then
+  --       roll_time*=2
+  --       roll_count+=1
+  --     end
+
+  --     if roll_count > 5 then
+  --       roll_time=2
+  --       roll_count=0
+  --       break
+  --     end
+
+  -- end
+
+  -- Roll die
+  -- if T%roll_time == 0 then
+  --   roll_val=flr(rnd(20))+1
+  --   roll_count+=1
+  -- end
+    
+  -- Exponential slowing of die rolling animation
+  -- if T%30 == 0 then
+  --   roll_time*=2
+  -- end
+
+  -- print(roll_val,roll_x,109,8)
+
+  -- if roll_count == 19 then
+  --   roll_time = 2
+  --   roll_count = 0
+  -- end
 end
 
 function cmbt_drw()
@@ -230,12 +268,73 @@ function cmbt_drw()
  local pc = c.players[c.player_turn]
  -- Draw combat menu
  if cmbt_state == cmbt_states.init then
-  roll_init()
+  -- roll_init()
+  draw_roll()
  else
   cmbt_menu(pc,s,cmbt_state)
  end
  color(8)
+ print(roll_count)
+ print(roll_time)
+--  print(T%30)
 --  print(s)
+end
+
+-- Rolling Initiative
+function init_ini()
+  g.drw = init_drw
+  g.upd = init_upd
+  roll_count = 0
+  roll_time = 2
+  roll_val = 21
+end
+
+function init_drw()
+  cls()
+  draw_roll()
+  print(roll_time)
+  -- print(roll_count)
+  -- print(T%roll_time)
+end
+
+function init_upd()
+  if T%roll_time == 0 then
+    roll_val = flr(rnd(20)) + 1
+    roll_count+=1
+  end 
+
+  if T%10 == 0 then
+    roll_time*=2
+  end
+
+  if roll_time < 0 then
+    roll_count = 0
+    roll_time = 2
+  end
+
+end
+
+function draw_roll()
+  local scrn_sz = 128;
+  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
+  rectfill(1, 87, 126, 126, 0)
+  -- Draw Roster
+  for i=0,#c.players-1 do
+    palt(0,false)
+    spr(c.players[i+1].sp,64+i*10, 92)
+    print(c.players[i+1].ini,64+i*10, 100)
+    palt()
+  end
+  -- Draw D20
+  spr(192,0,92,2,4)
+  spr(192,16,92,2,4,true)
+  -- Shifting print value for single digit values
+  if roll_val < 10 then
+    roll_x = 15
+  else
+    roll_x = 13
+  end
+  print(roll_val,roll_x,109,8)
 end
 -->8
 -- credits
