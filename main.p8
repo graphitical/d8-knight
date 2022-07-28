@@ -6,30 +6,62 @@ g = {} -- games state
 c = {} -- config
 T = 0
 
+function make_pc()
+  return {
+    name='blue bunny',
+    i=0,
+    j=0,
+    mvmt=8,
+    ini=0,
+    tail={},
+    bktrk=0,
+    sp=255,
+    move=move_pc
+  }
+end
+
+function move_pc(pc,di,dj)
+ local nxt = {pc.i+di,
+        pc.j+dj}
+ 
+ local nw_tail = {}
+ -- Rebuilding tail every time 
+ -- means we allow backtracking
+ for p in all(pc.tail) do
+  if nxt[1]==p[1] and
+     nxt[2]==p[2] and
+     pc.bktrk == 0 then
+   break
+  end
+  add(nw_tail, p)
+ end
+ -- if the tail is growing
+ -- then add our current pos
+ -- as the end of the tail
+ if #nw_tail >= #pc.tail then
+  add(nw_tail, {pc.i, pc.j})
+ end
+
+ -- if open and we have 
+ -- movement we can move there
+ -- TODO:
+ -- https://www.lexaloffle.com/bbs/?tid=46181 
+ if not fget(mget(nxt[1],nxt[2]),0) and
+    (pc.mvmt-#nw_tail) >= 0 then
+  pc.i = nxt[1]
+  pc.j = nxt[2]
+  pc.tail = nw_tail
+ end
+end
+
 function _init()
   T = 0
   c.players = {}
-  local pc = {
-    name="blue bunny",
-    i=4, 
-    j=4, 
-    mvmt=8, 
-    tail={}, 
-    bktrk = 0,
-    sp=255}
-    add(c.players,pc)
-    local pc = { 
-    name = "brown bunny",
-    i = 8, 
-    j = 4, 
-    mvmt=6, 
-    tail={}, 
-    bktrk = 0,
-    sp=254}
+  add(c.players,make_pc())
 
-  add(c.players,pc)
-
-  init_ini()
+  -- init_ini()
+  -- mmenu_ini()
+  cmbt_ini()
 end
 
 function _update()
@@ -126,39 +158,6 @@ function end_turn(pc)
  pc.bktrk = 0
 end
 
-function move_pc(pc,di,dj)
- local nxt = {pc.i+di,
-        pc.j+dj}
- 
- local nw_tail = {}
- -- Rebuilding tail every time 
- -- means we allow backtracking
- for p in all(pc.tail) do
-  if nxt[1]==p[1] and
-     nxt[2]==p[2] and
-     pc.bktrk == 0 then
-   break
-  end
-  add(nw_tail, p)
- end
- -- if the tail is growing
- -- then add our current pos
- -- as the end of the tail
- if #nw_tail >= #pc.tail then
-  add(nw_tail, {pc.i, pc.j})
- end
-
- -- if open and we have 
- -- movement we can move there
- -- TODO:
- -- https://www.lexaloffle.com/bbs/?tid=46181 
- if not fget(mget(nxt[1],nxt[2]),0) and
-    (pc.mvmt-#nw_tail) >= 0 then
-  pc.i = nxt[1]
-  pc.j = nxt[2]
-  pc.tail = nw_tail
- end
-end
 
 function cmbt_menu(pc, s, cmbt_state)
   local scrn_sz = 128;
@@ -189,14 +188,14 @@ function cmbt_upd()
   if cmbt_state == cmbt_states.menu then
     if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
     if (btnp(⬇️)) s = (s + 1) % 4
-    if (btnp(4)) cmbt_state = s + 2
+    if (btnp(❎)) cmbt_state = s + 2
   -- Movement State
   elseif cmbt_state == cmbt_states.move then
-    if (btnp(⬅️)) move_pc(pc,-1, 0)
-    if (btnp(➡️)) move_pc(pc, 1, 0)
-    if (btnp(⬆️)) move_pc(pc, 0,-1)
-    if (btnp(⬇️)) move_pc(pc, 0, 1)
-    if (btnp(4)) cmbt_state = cmbt_states.menu
+    if (btnp(⬅️)) pc:move(-1, 0)
+    if (btnp(➡️)) pc:move( 1, 0)
+    if (btnp(⬆️)) pc:move( 0,-1)
+    if (btnp(⬇️)) pc:move( 0, 1)
+    if (btnp(❎)) cmbt_state = cmbt_states.menu
   -- TODO: Attack states. Items?
   elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
     -- Prevent backtracking if we've
@@ -204,7 +203,7 @@ function cmbt_upd()
     if #pc.tail > 0 then
       pc.bktrk = #pc.tail
     end
-    if (btnp(4)) cmbt_state = cmbt_states.menu
+    if (btnp(❎)) cmbt_state = cmbt_states.menu
   elseif cmbt_state == cmbt_states.end_turn then
     end_turn(pc)
     cmbt_state = cmbt_states.menu
