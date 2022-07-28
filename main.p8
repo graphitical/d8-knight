@@ -6,6 +6,26 @@ g = {} -- games state
 c = {} -- config
 T = 0
 
+function _init()
+  T = 0
+  c.players = {}
+  add(c.players,make_pc())
+
+  -- mmenu_ini()
+  exp_ini()
+  -- init_ini()
+  -- cmbt_ini()
+end
+
+function _update()
+ T+=1
+ g.upd()
+end
+
+function _draw()
+ g.drw()
+end
+
 function make_pc()
   return {
     name='blue bunny',
@@ -16,11 +36,30 @@ function make_pc()
     tail={},
     bktrk=0,
     sp=255,
-    move=move_pc
+    move=move_pc,
+    draw=draw_pc
   }
 end
 
+-- returns true if first flag is
+-- on for sprite in location 
+-- (i,j)
+function coll_pc(pc,i,j)
+  return fget(mget(i,j),0)
+end
+
+-- moves PC by (di,dj) if no
+-- collision
 function move_pc(pc,di,dj)
+  local nxt = {pc.i+di,
+        pc.j+dj}
+  if not coll_pc(pc,nxt[1],nxt[2]) then
+    pc.i = nxt[1]
+    pc.j = nxt[2]
+  end
+end
+
+function cmbt_move(pc,di,dj)
  local nxt = {pc.i+di,
         pc.j+dj}
  
@@ -46,31 +85,21 @@ function move_pc(pc,di,dj)
  -- movement we can move there
  -- TODO:
  -- https://www.lexaloffle.com/bbs/?tid=46181 
- if not fget(mget(nxt[1],nxt[2]),0) and
+ if not coll_pc(pc,nxt[1],nxt[2]) and
     (pc.mvmt-#nw_tail) >= 0 then
-  pc.i = nxt[1]
-  pc.j = nxt[2]
+  move_pc(pc,di,dj)
   pc.tail = nw_tail
+  -- pc.i = nxt[1]
+  -- pc.j = nxt[2]
+  -- pc.tail = nw_tail
  end
 end
 
-function _init()
-  T = 0
-  c.players = {}
-  add(c.players,make_pc())
-
-  -- init_ini()
-  -- mmenu_ini()
-  cmbt_ini()
-end
-
-function _update()
- T+=1
- g.upd()
-end
-
-function _draw()
- g.drw()
+function draw_pc(pc)
+  palt(0,false) -- keeps black eyes as black
+  spr(pc.sp,pc.i*8,pc.j*8)
+  palt()
+  render_path(pc)
 end
 -->8
 -- main menu
@@ -124,6 +153,26 @@ function ctscn_drw()
 end
 -->8
 -- non-combat exploration
+function exp_ini()
+  g.upd = exp_upd
+  g.drw = exp_drw
+end
+
+function exp_upd()
+  local pc = c.players[1]
+  if (btnp(⬅️)) pc:move(-1, 0)
+  if (btnp(➡️)) pc:move( 1, 0)
+  if (btnp(⬆️)) pc:move( 0,-1)
+  if (btnp(⬇️)) pc:move( 0, 1)
+end
+
+function exp_drw()
+  cls()
+  map()
+  local pc = c.players[1]
+  pc:draw()
+end
+
 -->8
 -- combat
 function cmbt_ini()
@@ -223,10 +272,7 @@ function cmbt_drw()
  map()
  -- Draw all PCs & NPCs
  for pc in all(c.players) do
-  palt(0,false) -- keeps black eyes as black
-  spr(pc.sp,pc.i*8,pc.j*8)
-  palt()
-  render_path(pc)
+  pc:draw()
  end
  -- Focus on current PC
  local pc = c.players[c.player_turn]
