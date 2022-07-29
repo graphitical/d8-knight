@@ -5,8 +5,8 @@ __lua__
 g = {} -- games state
 c = {} -- config
 T = 0
--- debug = false
 debug = true
+debug = false
 
 function _init()
   T = 0
@@ -73,7 +73,6 @@ end
 function draw_en(en,x,y)
   x = x or en.i*8
   y = y or en.j*8
-  palt()
   spr(en.sp,x,y)
 end
 
@@ -161,15 +160,10 @@ function draw_pc(pc,x,y)
   x = x or pc.i*8
   y = y or pc.j*8
   if debug then
-    -- Show target sprite position after animation
-    palt(0,false) -- keeps black eyes as black
     pal({[12]=7})
     spr(pc.cani,x,y)
-    pal()
   end
-  palt(0,false) -- keeps black eyes as black
   spr(pc.cani,x+pc.ox,y+pc.oy)
-  palt()
   render_path(pc)
 end
 -- Get next frame in animation
@@ -351,22 +345,11 @@ function upd_roll()
 end
 
 function cmbt_drw()
- cls()
- map()
- -- Draw all PCs & NPCs
- for pc in all(c.players) do
-  pc:draw()
- end
- -- Focus on current PC
- local pc = c.players[c.player_turn]
- -- Draw combat menu
- if cmbt_state == cmbt_states.init then
-  -- roll_init()
-  draw_roll()
- else
-  cmbt_menu(pc,s,cmbt_state)
- end
- color(8)
+  cls()
+  map()
+  for e in all(c.ents) do
+    e:dr()
+  end
 end
 
 -- rolling initiative
@@ -384,7 +367,6 @@ function init_ini()
 end
 
 function init_drw()
-  cls()
   draw_roll()
 end
 
