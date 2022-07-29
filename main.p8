@@ -10,8 +10,11 @@ debug = false
 
 function _init()
   T = 0
-  c.players = {}
-  add(c.players,make_pc())
+  c.ents = {}
+  add(c.ents,make_pc())
+  for i=1,4 do
+    add(c.ents,make_en())
+  end
 
   -- mmenu_ini()
   exp_ini()
@@ -40,11 +43,40 @@ function make_pc()
     tail={},
     bktrk=0,
     sp=236,
-    move=move_pc,
-    draw=draw_pc,
+    mv=move_pc,
+    up=upd_pc,
+    dr=draw_pc,
     ani={236,237,238,239},
-    cani=236
+    cani=236,
+    type='pc'
   }
+end
+
+function make_en()
+  local span = 16
+  return {
+    name='En1',
+    i = flr(rnd(span)),
+    j = flr(rnd(span)),
+    ini=0,
+    sp=252,
+    up=upd_en,
+    dr=draw_en,
+    type='en'
+  }
+end
+
+function upd_en()
+--placeholder
+end
+
+function draw_en(en,x,y)
+  local x = x or en.i*8
+  local y = y or en.j*8
+  palt()
+  -- palt(0,false)
+  spr(en.sp,x,y)
+  -- palt()
 end
 
 -- returns true if first flag is
@@ -54,7 +86,7 @@ function coll_pc(pc,i,j)
   return fget(mget(i,j),0)
 end
 
--- moves PC by (di,dj) if no
+-- moves pc by (di,dj) if no
 -- collision
 function move_pc(pc,di,dj)
   local nxt = {pc.i+di,
@@ -64,26 +96,32 @@ function move_pc(pc,di,dj)
     pc.j = nxt[2]
     pc.ox = -di*8
     pc.oy = -dj*8
-    g.upd = move_upd
   end
 end
 
-function move_upd()
-  for pc in all(c.players) do
-    if pc.ox==0 and pc.oy==0 then
-      g.upd = exp_upd
-      pc.cani=pc.ani[1]
-      return
-    end
-
-    if (pc.ox > 0) pc.ox-=1
-    if (pc.ox < 0) pc.ox+=1
-    if (pc.oy > 0) pc.oy-=1
-    if (pc.oy < 0) pc.oy+=1
-
-    pc.cani = (pc.cani + 1)%4 + pc.ani[1]
-
+function upd_pc(pc)
+  if pc.ox==0 and pc.oy==0 then
+    pc.cani=pc.ani[1]
+    return
   end
+  local m = 0
+  if (pc.ox > 0) then
+    pc.ox-=2
+    m = -1
+  end
+  if (pc.ox < 0) then
+    pc.ox+=2
+    m = 1
+  end
+  if (pc.oy > 0) then
+    pc.oy-=2
+    m = -1
+  end
+  if (pc.oy < 0) then
+    pc.oy+=2
+    m = 1
+  end
+  pc.cani = (pc.cani + m)%4 + pc.ani[1]
 end
 
 -- wrapper on move_pc that 
@@ -116,24 +154,23 @@ function cmbt_move(pc,di,dj)
  -- https://www.lexaloffle.com/bbs/?tid=46181 
  if not coll_pc(pc,nxt[1],nxt[2]) and
     (pc.mvmt-#nw_tail) >= 0 then
-  move_pc(pc,di,dj)
+  pc:mv(di,dj)
   pc.tail = nw_tail
-  -- pc.i = nxt[1]
-  -- pc.j = nxt[2]
-  -- pc.tail = nw_tail
  end
 end
 
-function draw_pc(pc)
+function draw_pc(pc,x,y)
+  local x = x or pc.i*8
+  local y = y or pc.j*8
   if debug then
     -- Show target sprite position after animation
     palt(0,false) -- keeps black eyes as black
     pal({[12]=7})
-    spr(pc.cani,pc.i*8,pc.j*8)
+    spr(pc.cani,x,y)
     pal()
   end
   palt(0,false) -- keeps black eyes as black
-  spr(pc.cani,pc.i*8+pc.ox,pc.j*8+pc.oy)
+  spr(pc.cani,x+pc.ox,y+pc.oy)
   palt()
   render_path(pc)
 end
@@ -200,23 +237,28 @@ function exp_ini()
 end
 
 function exp_upd()
-  local pc = c.players[1]
-  if (btnp(⬅️)) pc:move(-1, 0)
-  if (btnp(➡️)) pc:move( 1, 0)
-  if (btnp(⬆️)) pc:move( 0,-1)
-  if (btnp(⬇️)) pc:move( 0, 1)
-
-  -- Dummy way to enter combat
-  if pc.i == 1 and pc.j == 1 then
-    init_ini()
+  for e in all(c.ents) do
+    if e.type=='pc' then
+      if (btnp(⬅️)) e:mv(-1, 0)
+      if (btnp(➡️)) e:mv( 1, 0)
+      if (btnp(⬆️)) e:mv( 0,-1)
+      if (btnp(⬇️)) e:mv( 0, 1)
+      -- dummy way to enter combat
+      if e.i == 1 and e.j == 1 then
+        init_ini()
+      end
+    end
+    e:up()
   end
+
 end
 
 function exp_drw()
   cls()
   map()
-  local pc = c.players[1]
-  pc:draw()
+  for e in all(c.ents) do
+    e:dr()
+  end
   rect(7,8,15,16,9)
 end
 
@@ -287,10 +329,10 @@ function cmbt_upd()
     if (btnp(❎)) cmbt_state = s + 2
   -- Movement State
   elseif cmbt_state == cmbt_states.move then
-    if (btnp(⬅️)) pc:move(-1, 0)
-    if (btnp(➡️)) pc:move( 1, 0)
-    if (btnp(⬆️)) pc:move( 0,-1)
-    if (btnp(⬇️)) pc:move( 0, 1)
+    if (btnp(⬅️)) e:move(-1, 0)
+    if (btnp(➡️)) e:move( 1, 0)
+    if (btnp(⬆️)) e:move( 0,-1)
+    if (btnp(⬇️)) e:move( 0, 1)
     if (btnp(❎)) cmbt_state = cmbt_states.menu
   -- TODO: Attack states. Items?
   elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
@@ -341,6 +383,10 @@ function init_ini()
   rtime = 1
   rval = 21
   p = 0
+  for e in all(c.ents) do
+    e.ox = 0
+    e.oy = 0
+  end
 end
 
 function init_drw()
@@ -360,13 +406,12 @@ function init_upd()
   end
 
   -- done rolling init
-  if p == #c.players and
-          not roll then
+  if p == #c.ents and
+           not roll then
     g.upd = cmbt_upd
     g.drw = cmbt_drw
   end
 end
-
 
 function rollad(num)
   if T%rtime == 0 then
@@ -379,7 +424,7 @@ function rollad(num)
 
   if rtime > 127 then
     roll = false
-    c.players[p].ini = rval
+    c.ents[p].ini = rval
   end
 end
 
@@ -388,11 +433,12 @@ function draw_roll()
   rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
   rectfill(1, 87, 126, 126, 0)
   -- Draw Roster
-  for i=0,#c.players-1 do
-    palt(0,false)
-    spr(c.players[i+1].sp,64+i*10, 92)
-    print(c.players[i+1].ini,64+i*10, 100,8)
-    palt()
+  for i=0,#c.ents-1 do
+    local e = c.ents[i+1]
+    e:dr(64+i*10,92)
+    local dx = 0
+    if (e.ini < 10) dx=2
+    print(e.ini,64+i*10+dx,100,8)
   end
   -- Draw D20
   spr(192,0,92,2,4)
@@ -537,7 +583,7 @@ __gfx__
 0000007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000007e707e704e404e405e505e50cec0cec0
 0000000077777000000000000000000000000000000000000000000000000000000000000000000000000000000000007e707e704e404e405e505e50cec0cec0
 000000000077770000000000000000000000000000000000000000000000000000000000000000000000000000000000777777704444444055555550ccccccc0
-000000000007777000000000000000000000000000000000000000000000000000000000000000000000000000000000707770704044404050555050c0ccc0c0
+000000000007777000000000000000000000000000000000000000000000000000000000000000000000000000000000787778704044404050555050c0ccc0c0
 000000000000077700000000000000000000000000000000000000000000000000000000000000000000000000000000777777704444444055555550ccccccc0
 000000000000000700000000000000000000000000000000000000000000000000000000000000000000000000000000077e7700044e4400055e55000ccecc00
 __gff__
