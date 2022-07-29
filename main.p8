@@ -5,14 +5,14 @@ __lua__
 g = {} -- games state
 c = {} -- config
 T = 0
-debug = false
--- debug = true
+-- debug = false
+debug = true
 
 function _init()
   T = 0
   c.ents = {}
   add(c.ents,make_pc())
-  for i=1,4 do
+  for i=1,2 do
     add(c.ents,make_en())
   end
 
@@ -71,12 +71,10 @@ function upd_en()
 end
 
 function draw_en(en,x,y)
-  local x = x or en.i*8
-  local y = y or en.j*8
+  x = x or en.i*8
+  y = y or en.j*8
   palt()
-  -- palt(0,false)
   spr(en.sp,x,y)
-  -- palt()
 end
 
 -- returns true if first flag is
@@ -160,8 +158,8 @@ function cmbt_move(pc,di,dj)
 end
 
 function draw_pc(pc,x,y)
-  local x = x or pc.i*8
-  local y = y or pc.j*8
+  x = x or pc.i*8
+  y = y or pc.j*8
   if debug then
     -- Show target sprite position after animation
     palt(0,false) -- keeps black eyes as black
@@ -250,7 +248,6 @@ function exp_upd()
     end
     e:up()
   end
-
 end
 
 function exp_drw()
@@ -274,9 +271,6 @@ function cmbt_ini()
   rval = 21
   rtime = 2
   rcount = 0
-
-  c.num_turns = #c.players
-  c.player_turn = 1
 end
 
 function render_path(pc)  
