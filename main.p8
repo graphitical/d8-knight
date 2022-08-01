@@ -17,9 +17,9 @@ function _init()
   end
 
   -- mmenu_ini()
-  exp_ini()
+  -- exp_ini()
   -- init_ini()
-  -- cmbt_ini()
+  cmbt_ini()
 end
 
 function _update()
@@ -44,11 +44,19 @@ function make_pc()
     bktrk=0,
     sp=236,
     mv=move_pc,
+    cmv=cmbt_move,
     up=upd_pc,
     dr=draw_pc,
+    et=end_turn_pc,
     ani={236,237,238,239},
     cani=236,
-    type='pc'
+    type='pc',
+    opts= {
+      'move',
+      'melee attack',
+      'ranged attack',
+      'end'
+    }
   }
 end
 
@@ -231,12 +239,13 @@ end
 function exp_upd()
   for e in all(c.ents) do
     if e.type=='pc' then
-      if (btnp(⬅️)) e:mv(-1, 0)
-      if (btnp(➡️)) e:mv( 1, 0)
-      if (btnp(⬆️)) e:mv( 0,-1)
-      if (btnp(⬇️)) e:mv( 0, 1)
+      for i=0,3 do
+        if (btnp(i)) c.ents[pturn]:mv(getdx(i),getdy(i))
+      end
       -- dummy way to enter combat
-      if e.i == 1 and e.j == 1 then
+      if e.i == 1 and e.j == 1 
+      and e.ox == 0 and e.oy == 0
+      then
         init_ini()
       end
     end
@@ -258,14 +267,108 @@ end
 function cmbt_ini()
   g.upd = cmbt_upd
   g.drw = cmbt_drw
-  cmbt_states={init=0,menu=1,move=2,mattack=3,rattack=4,end_turn=5}
-  --  cmbt_state = cmbt_states.menu
-  cmbt_state = cmbt_states.init
-  s=0
   rval = 21
   rtime = 2
   rcount = 0
+  pturn = 1
+  cmenu = {
+    dr=menu_draw,
+    up=menu_upd,
+    s=0,
+    p=false
+  }
 end
+
+function getdx(i)
+  if i == 0 then
+    return -1
+  elseif i==1 then
+    return 1
+  end
+  return 0
+end
+
+function getdy(i)
+  if i == 2 then
+    return -1
+  elseif i==3 then
+    return 1
+  end
+  return 0
+end
+
+function cmbt_upd()
+  if cmenu.p then
+    local pc = c.ents[pturn]
+    -- Movement
+    if cmenu.s == 0 then
+      for i=0,3 do
+        if (btnp(i)) pc:cmv(getdx(i),getdy(i))
+      end
+    -- Attack
+    elseif cmenu.s==1 and cmenu.s==2 then
+      -- Placeholder
+    -- End Turn
+    elseif cmenu.s == 3 then
+      pc:et()
+      pturn = (pturn+1)%#c.ents + 1
+    end
+  end
+
+  for e in all(c.ents) do
+    e:up()
+  end
+  cmenu:up()
+end
+
+function cmbt_drw()
+  cls()
+  map()
+  for e in all(c.ents) do
+    e:dr()
+  end
+  -- draw menu
+  cmenu:dr()
+  if debug then
+    print('pturn-'..pturn,90,120,9)
+    -- print(cmenu.s)
+  end
+end
+
+function menu_draw(self)
+  local scrn_sz = 128;
+  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
+  rectfill(1, 87, 126, 126, 0)
+  local line_start = 90;
+  local line_delta = 10;
+
+  local act = c.ents[pturn]
+  print(act.name, 10, 80, 6)
+
+  local opts = act.opts
+  opts[1] = "move ("..5*(act.mvmt-#act.tail).."/"..5*act.mvmt..")"
+  for i=1,#act.opts do
+    print(opts[i], 10, line_start+(i-1)*line_delta, 6)
+  end
+
+  if self.p then
+    rectfill(3, line_start+line_delta*self.s, 7, line_start+self.s*line_delta+4, 6)
+  else
+    rect(3, line_start+line_delta*self.s, 7, line_start+self.s*line_delta+4, 6)
+  end
+end
+
+function menu_upd(self)
+  if self.p then
+    if (btnp(❎)) self.p = false
+  else
+    if (btnp(⬆️)) self.s-=1
+    if (btnp(⬇️)) self.s+=1
+    self.s = self.s%4
+    if (btnp(❎)) self.p=true
+  end
+end
+
 
 function render_path(pc)  
  if #pc.tail == 0 then
@@ -278,12 +381,10 @@ function render_path(pc)
  end
 end
 
-function end_turn(pc)
- c.player_turn = c.player_turn % 2 + 1
+function end_turn_pc(pc)
  pc.tail = {}
  pc.bktrk = 0
 end
-
 
 function cmbt_menu(pc, s, cmbt_state)
   local scrn_sz = 128;
@@ -308,47 +409,38 @@ function cmbt_menu(pc, s, cmbt_state)
   end
 end
 
-function cmbt_upd()
- local pc = c.players[c.player_turn]
- -- Menu select state
-  if cmbt_state == cmbt_states.menu then
-    if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
-    if (btnp(⬇️)) s = (s + 1) % 4
-    if (btnp(❎)) cmbt_state = s + 2
-  -- Movement State
-  elseif cmbt_state == cmbt_states.move then
-    if (btnp(⬅️)) e:move(-1, 0)
-    if (btnp(➡️)) e:move( 1, 0)
-    if (btnp(⬆️)) e:move( 0,-1)
-    if (btnp(⬇️)) e:move( 0, 1)
-    if (btnp(❎)) cmbt_state = cmbt_states.menu
-  -- TODO: Attack states. Items?
-  elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
-    -- Prevent backtracking if we've
-    -- already moved
-    if #pc.tail > 0 then
-      pc.bktrk = #pc.tail
-    end
-    if (btnp(❎)) cmbt_state = cmbt_states.menu
-  elseif cmbt_state == cmbt_states.end_turn then
-    end_turn(pc)
-    cmbt_state = cmbt_states.menu
-    s = 0
-  else
-    -- if (btnp(4)) cmbt_state = cmbt_states.menu
-  end
-end
 
-
-function upd_roll()
-
-end
-
-function cmbt_drw()
-  cls()
-  map()
+function old_cmbt_upd()
   for e in all(c.ents) do
-    e:dr()
+    if e.type=='pc' then
+      -- Menu select state
+        if cmbt_state == cmbt_states.menu then
+          if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
+          if (btnp(⬇️)) s = (s + 1) % 4
+          if (btnp(❎)) cmbt_state = s + 2
+        -- Movement State
+        elseif cmbt_state == cmbt_states.move then
+          if (btnp(⬅️)) e:move(-1, 0)
+          if (btnp(➡️)) e:move( 1, 0)
+          if (btnp(⬆️)) e:move( 0,-1)
+          if (btnp(⬇️)) e:move( 0, 1)
+          if (btnp(❎)) cmbt_state = cmbt_states.menu
+        -- TODO: Attack states. Items?
+        elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
+          -- Prevent backtracking if we've
+          -- already moved
+          if #e.tail > 0 then
+            e.bktrk = #e.tail
+          end
+          if (btnp(❎)) cmbt_state = cmbt_states.menu
+        elseif cmbt_state == cmbt_states.end_turn then
+          end_turn(e)
+          cmbt_state = cmbt_states.menu
+          s = 0
+        else
+          -- if (btnp(4)) cmbt_state = cmbt_states.menu
+        end
+      end
   end
 end
 
@@ -384,8 +476,7 @@ function init_upd()
   -- done rolling init
   if p == #c.ents and
            not roll then
-    g.upd = cmbt_upd
-    g.drw = cmbt_drw
+    cmbt_ini()
   end
 end
 
