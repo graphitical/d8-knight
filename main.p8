@@ -279,23 +279,6 @@ function cmbt_ini()
   }
 end
 
-function getdx(i)
-  if i == 0 then
-    return -1
-  elseif i==1 then
-    return 1
-  end
-  return 0
-end
-
-function getdy(i)
-  if i == 2 then
-    return -1
-  elseif i==3 then
-    return 1
-  end
-  return 0
-end
 
 function cmbt_upd()
   if cmenu.p then
@@ -524,6 +507,30 @@ function draw_roll()
 end
 -->8
 -- credits
+-->8
+--tools
+--[[ 
+  getdx and getdy are used to 
+  simplify the button tracking
+  process for dpad input
+]]
+function getdx(i)
+  if i == 0 then
+    return -1
+  elseif i==1 then
+    return 1
+  end
+  return 0
+end
+
+function getdy(i)
+  if i == 2 then
+    return -1
+  elseif i==3 then
+    return 1
+  end
+  return 0
+end
 __gfx__
 0000000000000000111011101cccccc1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000000000000000000000000c1111110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
