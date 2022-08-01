@@ -3,25 +3,24 @@ version 36
 __lua__
 -- main
 g = {} -- games state
-c = {} -- config
+m = {} -- map
 T = 0
 debug = true
 debug = false
 
 function _init()
   T = 0
-  c.ents = {}
-  add(c.ents,make_pc())
+  actors = {}
+  add(actors,make_pc())
   for i=1,2 do
-    add(c.ents,make_en())
+    add(actors,make_en())
   end
   for i = 1,5 do
-    add(c.ents,make_carrot())
+    add(actors,make_carrot())
   end
   pturn=1
 
   -- Map
-  m = {}
   m.i = 0
   m.j = 0
   m.ox = 0
@@ -30,7 +29,7 @@ function _init()
   m.h = 32
   m.up = 
     function(s)
-      local p = c.ents[1]
+      local p = actors[1]
       local newi = flr(p.i/16)*16
       local newj = flr(p.j/16)*16
 
@@ -179,7 +178,7 @@ function move_pc(s,di,dj)
     s.oy = dj*4
   end
 
-  for e in all(c.ents) do
+  for e in all(actors) do
     if e != s then
       interact(s,e,s.i,s.j)
     end
@@ -332,10 +331,10 @@ function exp_ini()
 end
 
 function exp_upd()
-  for e in all(c.ents) do
+  for e in all(actors) do
     if e.type=='pc' then
       for i=0,3 do
-        if (btnp(i)) c.ents[pturn]:mv(getdx(i),getdy(i))
+        if (btnp(i)) actors[pturn]:mv(getdx(i),getdy(i))
       end
       -- dummy way to enter combat
       if e.i == 1 and e.j == 1 
@@ -349,7 +348,7 @@ function exp_upd()
 end
 
 function exp_drw()
-  for e in all(c.ents) do
+  for e in all(actors) do
     e:dr()
   end
   -- Portal to enter combat
@@ -376,7 +375,7 @@ end
 
 function cmbt_upd()
   if cmenu.p then
-    local pc = c.ents[pturn]
+    local pc = actors[pturn]
     -- Movement
     if cmenu.s == 0 then
       for i=0,3 do
@@ -388,18 +387,18 @@ function cmbt_upd()
     -- End Turn
     elseif cmenu.s == 3 then
       pc:et()
-      pturn = (pturn+1)%#c.ents + 1
+      pturn = (pturn+1)%#actors + 1
     end
   end
 
-  for e in all(c.ents) do
+  for e in all(actors) do
     e:up()
   end
   cmenu:up()
 end
 
 function cmbt_drw()
-  for e in all(c.ents) do
+  for e in all(actors) do
     e:dr()
   end
   -- draw menu
@@ -417,7 +416,7 @@ function menu_draw(self)
   local line_start = 90;
   local line_delta = 10;
 
-  local act = c.ents[pturn]
+  local act = actors[pturn]
   print(act.name, 10, 80, 6)
 
   local opts = act.opts
@@ -486,7 +485,7 @@ end
 
 
 function old_cmbt_upd()
-  for e in all(c.ents) do
+  for e in all(actors) do
     if e.type=='pc' then
       -- Menu select state
         if cmbt_state == cmbt_states.menu then
@@ -527,7 +526,7 @@ function init_ini()
   rtime = 1
   rval = 21
   p = 0
-  for e in all(c.ents) do
+  for e in all(actors) do
     e.ox = 0
     e.oy = 0
   end
@@ -549,7 +548,7 @@ function init_upd()
   end
 
   -- done rolling init
-  if p == #c.ents and
+  if p == #actors and
            not roll then
     cmbt_ini()
   end
@@ -566,7 +565,7 @@ function rollad(num)
 
   if rtime > 127 then
     roll = false
-    c.ents[p].ini = rval
+    actors[p].ini = rval
   end
 end
 
@@ -575,8 +574,8 @@ function draw_roll()
   rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
   rectfill(1, 87, 126, 126, 0)
   -- Draw Roster
-  for i=0,#c.ents-1 do
-    local e = c.ents[i+1]
+  for i=0,#actors-1 do
+    local e = actors[i+1]
     e:dr(64+i*10,92)
     local dx = 0
     if (e.ini < 10) dx=2
