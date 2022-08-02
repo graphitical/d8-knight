@@ -3,24 +3,83 @@ version 36
 __lua__
 -- main
 g = {} -- games state
-m = {} -- map
+actors = {}
 T = 0
 debug = true
 debug = false
 
 function _init()
   T = 0
-  actors = {}
-  add(actors,make_pc())
-  for i=1,2 do
-    add(actors,make_en())
+  pc = make_pc()
+  m = make_map()
+  for i=1,5 do
+    make_en()
   end
-  for i = 1,5 do
-    add(actors,make_carrot())
+  for i=1,5 do
+    make_carrot()
   end
-  pturn=1
 
-  -- Map
+  -- mmenu_ini()
+  exp_ini()
+  -- init_ini()
+  -- cmbt_ini()
+end
+
+function _update()
+  T+=1
+  m:up()
+  g.upd()
+end
+
+function _draw()
+  cls()
+  m:dr()
+  g.drw()
+end
+
+-- make an actor
+-- add it to global collection
+-- i,j means center of actor
+-- in map coordinates
+function make_actor(sp,i,j)
+  local a = {}
+  a.sp=sp
+  a.i=i or 0
+  a.j=j or 1
+  a.ox=0
+  a.oy=0
+  a.frame=0
+  a.frames=1
+  a.ini=0
+  add(actors,a)
+  return a
+end
+
+function make_pc()
+  local a = make_actor(236,0,1)
+  a.name='blue bunny'
+  a.frames=4
+  a.mvmt=8
+  a.maxhp=40
+  a.hp=a.maxhp
+  a.tail={}
+  a.bktrk=0
+  a.car=0
+  a.mv=move_pc
+  a.up=upd_pc
+  a.dr=draw_pc
+  a.et=end_turn_pc
+  a.type='pc'
+  a.opts=
+    {'move',
+     'melee attack',
+     'ranged attack',
+     'end turn'}
+  return a
+end
+
+function make_map()
+  local m = {}
   m.i = 0
   m.j = 0
   m.ox = 0
@@ -63,77 +122,24 @@ function _init()
       map(0,0,0,0,s.w,s.h)
       camera(m.i*8-m.ox,m.j*8-m.oy)
     end
-
-  -- mmenu_ini()
-  exp_ini()
-  -- init_ini()
-  -- cmbt_ini()
-end
-
-function _update()
-  T+=1
-  m:up()
-  g.upd()
-end
-
-function _draw()
-  cls()
-  m:dr()
-  g.drw()
-end
-
-function make_pc()
-  return {
-    name='blue bunny',
-    i=0,
-    j=1,
-    ox=0, -- offsets for anim.
-    oy=0,
-    mvmt=8,
-    hp=40,
-    maxhp=40,
-    ini=0,
-    tail={},
-    bktrk=0,
-    sp=236,
-    car=0,
-    mv=move_pc,
-    cmv=cmbt_move,
-    up=upd_pc,
-    dr=draw_pc,
-    et=end_turn_pc,
-    ani={236,237,238,239},
-    cani=236,
-    type='pc',
-    opts= {
-      'move',
-      'melee attack',
-      'ranged attack',
-      'end'
-    }
-  }
+  return m
 end
 
 function make_en()
-  local span = 16
-  return {
-    name='En1',
-    i = flr(rnd(span)),
-    j = flr(rnd(span)),
-    ini=0,
-    sp=252,
-    up=upd_en,
-    dr=draw_en,
-    type='en'
-  }
+  local s = 16
+  local a = make_actor(252,flr(rnd(s)),flr(rnd(s)))
+  a.name='enemy'
+  a.maxhp=80
+  a.hp=a.maxhp
+  a.up=upd_en
+  a.dr=draw_en
+  a.type='en'
+  return a
 end
 
 function make_carrot()
-  local c = {}
   local span = 15
-  c.i=flr(rnd(span)) + 1
-  c.j=flr(rnd(span)) + 1
-  c.sp=220
+  local c = make_actor(220,flr(rnd(span))+1,flr(rnd(span))+1)
   c.dr=
     function(s)
       spr(s.sp,s.i*8,s.j*8)
@@ -141,6 +147,7 @@ function make_carrot()
   c.up=function() end
   return c
 end
+
 function upd_en()
 --placeholder
 end
@@ -185,29 +192,32 @@ function move_pc(s,di,dj)
   end
 end
 
-function upd_pc(pc)
-  if pc.ox==0 and pc.oy==0 then
-    pc.cani=pc.ani[1]
+function upd_pc(p)
+  if p.ox==0 and p.oy==0 then
+    -- p.cani=pc.ani[1]
+    p.frame=0
     return
   end
   local m = 0
-  if (pc.ox > 0) then
-    pc.ox-=2
+  if (p.ox > 0) then
+    p.ox-=2
     m = -1
   end
-  if (pc.ox < 0) then
-    pc.ox+=2
+  if (p.ox < 0) then
+    p.ox+=2
     m = 1
   end
-  if (pc.oy > 0) then
-    pc.oy-=2
+  if (p.oy > 0) then
+    p.oy-=2
     m = -1
   end
-  if (pc.oy < 0) then
-    pc.oy+=2
+  if (p.oy < 0) then
+    p.oy+=2
     m = 1
   end
-  pc.cani = (pc.cani + m)%4 + pc.ani[1]
+  -- p.cani = (pc.cani + m)%4 + pc.ani[1]
+  p.frame = p.frame + m
+  p.frame = p.frame%p.frames
 end
 
 -- wrapper on move_pc that 
@@ -246,26 +256,26 @@ if can_move(pc,nxt[1],nxt[2]) and
  end
 end
 
-function draw_pc(pc,x,y)
-  x = x or pc.i*8
-  y = y or pc.j*8
+function draw_pc(p,x,y)
+  x = x or p.i*8
+  y = y or p.j*8
   if debug then
     pal({[12]=7})
-    spr(pc.cani,x,y)
+    spr(p.sp+p.frame,x,y)
   end
-  spr(pc.cani,x+pc.ox,y+pc.oy)
-  render_path(pc)
+  spr(p.sp+p.frame,x+p.ox,y+p.oy)
+  render_path(p)
   -- HUD
   -- Draw Carrots collected
-  for i=1,pc.car do
+  for i=1,p.car do
     spr(220,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
   end
-  for i=pc.car+1,5 do
+  for i=p.car+1,5 do
     spr(219,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
   end
   -- HP
-  rect(1,1,pc.maxhp,6,0)
-  rectfill(2,2,pc.hp-1,5,8)
+  rect(1,1,p.maxhp,6,0)
+  rectfill(2,2,p.hp-1,5,8)
 end
 
 -- Get next frame in animation
@@ -331,26 +341,20 @@ function exp_ini()
 end
 
 function exp_upd()
-  for e in all(actors) do
-    if e.type=='pc' then
-      for i=0,3 do
-        if (btnp(i)) actors[pturn]:mv(getdx(i),getdy(i))
-      end
-      -- dummy way to enter combat
-      if e.i == 1 and e.j == 1 
-      and e.ox == 0 and e.oy == 0
-      then
-        init_ini()
-      end
-    end
-    e:up()
+  for i=0,3 do
+    if (btnp(i)) pc:mv(getdx(i),getdy(i))
+  end
+
+  foreach(actors, function(s) s:up() end)
+
+  -- Dummy way to enter combat
+  if pc.i==1 and pc.j==1 then
+    cmbt_ini()
   end
 end
 
 function exp_drw()
-  for e in all(actors) do
-    e:dr()
-  end
+  foreach(actors, function(s) s:dr() end)
   -- Portal to enter combat
   rect(7,8,15,16,9)
 end
