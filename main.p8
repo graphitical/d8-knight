@@ -4,6 +4,7 @@ __lua__
 -- main
 g = {} -- games state
 actors = {}
+chars = {}
 T = 0
 debug = true
 debug = false
@@ -12,7 +13,7 @@ function _init()
   T = 0
   pc = make_pc()
   m = make_map()
-  for i=1,5 do
+  for i=1,2 do
     make_en()
   end
   for i=1,5 do
@@ -23,6 +24,13 @@ function _init()
   exp_ini()
   -- init_ini()
   -- cmbt_ini()
+
+  -- Filter actors for only 
+  -- combat
+  for a in all(actors) do
+    if (is_char(a)) add(chars, a)
+  end
+
 end
 
 function _update()
@@ -52,7 +60,14 @@ function make_actor(sp,i,j)
   a.frames=1
   a.ini=0
   a.up=function(s) end
-  a.dr=function(s) spr(a.sp,a.i*8,a.j*8) end
+  a.dr=function(s) 
+    spr(a.sp,a.i*8,a.j*8) 
+  end
+  a.reset=function(s) 
+    s.frame=0
+    s.ox=0
+    s.oy=0
+  end
   add(actors,a)
   return a
 end
@@ -91,8 +106,8 @@ function make_map()
   m.up = 
     function(s)
       local p = actors[1]
-      local newi = flr(p.i/16)*16
-      local newj = flr(p.j/16)*16
+      local newi = (p.i\16)*16
+      local newj = (p.j\16)*16
 
       -- Scroll map instead of jumping
       if newi - m.i > 0 then
@@ -158,16 +173,23 @@ function can_move(p,di,dj)
   local newi = p.i+di
   local newj = p.j+dj
   -- Is tile a "wall"?
-  local t1 = not is_tile(0,newi,newj)
+  local test = not is_tile(0,newi,newj)
   -- Are we trying to move out
   -- of bound?
-  local t2 = (newi >= 0 and newi < m.w)
-  local t3 = (newj >= 0 and newj < m.h)
+  test = test and (newi >= 0 and newi < m.w)
+  test = test and (newj >= 0 and newj < m.h)
   -- Do we have movement left?
   -- Only relevant for combat
-  local t4 = g.upd!=cmbt_upd and
-              #p.tail < p.mvmt
-  return t1 and t2 and t3 and t4
+  test = test and (p.mvmt - #p.tail) > 0
+  -- Edge case, need to check if
+  -- going back to last spot
+  if not test then
+    local last = p.tail[#p.tail]
+    test = (last[1] == newi)
+    test = test and (last[2] == newj)
+  end
+
+  return test
 end
 
 function move_pc(s,di,dj)
@@ -177,6 +199,11 @@ function move_pc(s,di,dj)
   if can_move(s,di,dj) and
       m.ox == 0 and
       m.oy == 0 then
+    -- We only track the tail
+    -- during combat
+    if (g.upd == cmbt_upd) then
+      track_tail(s,di,dj)
+    end
     s.i+=di
     s.j+=dj
     s.ox = -di*8
@@ -197,7 +224,6 @@ end
 
 function upd_pc(p)
   if p.ox==0 and p.oy==0 then
-    -- p.cani=pc.ani[1]
     p.frame=0
     return
   end
@@ -222,69 +248,52 @@ function upd_pc(p)
   p.frame = p.frame%p.frames
 end
 
--- wrapper on move_pc that 
--- restricts motion for combat
-function cmbt_move(pc,di,dj)
- local nxt = {pc.i+di,
-        pc.j+dj}
- 
- local nw_tail = {}
- -- Rebuilding tail every time 
- -- means we allow backtracking
- for p in all(pc.tail) do
-  if nxt[1]==p[1] and
-     nxt[2]==p[2] and
-     pc.bktrk == 0 then
-   break
+function track_tail(c,di,dj)
+  local newx,newy=c.i+di,c.j+dj
+  local nw_tail = {}
+  for p in all(c.tail) do
+    if newx==p[1] and
+       newy==p[2] and
+       c.bktrk == 0 then
+      break
+    end
+    add(nw_tail,p)
   end
-  add(nw_tail, p)
- end
- -- if the tail is growing
- -- then add our current pos
- -- as the end of the tail
- if #nw_tail >= #pc.tail then
-  add(nw_tail, {pc.i, pc.j})
- end
 
- -- if open and we have 
- -- movement we can move there
- -- TODO:
- -- https://www.lexaloffle.com/bbs/?tid=46181 
- -- TODO: Broken because can_move now takes di,dj, not i,j
-if can_move(pc,nxt[1],nxt[2]) and
-    (pc.mvmt-#nw_tail) >= 0 then
-  pc:mv(di,dj)
-  pc.tail = nw_tail
- end
+  if #nw_tail >= #c.tail then
+    add(nw_tail, {c.i, c.j})
+  end
+
+  c.tail = nw_tail
+
 end
 
-function draw_pc(p,x,y)
-  x = x or p.i*8
-  y = y or p.j*8
+-- Draws pc to screen
+-- If x,y,f are provided then
+-- drawn image will be static
+function draw_pc(p,x,y,f)
+  x = x or (p.i*8+p.ox)
+  y = y or (p.j*8+p.oy)
+  f = f or p.frame
   if debug then
     pal({[12]=7})
-    spr(p.sp+p.frame,x,y)
+    spr(p.sp+f,x,y)
   end
-  spr(p.sp+p.frame,x+p.ox,y+p.oy)
+  spr(p.sp+f,x,y)
   render_path(p)
-  -- HUD
-  -- Draw Carrots collected
-  for i=1,p.car do
-    spr(220,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
-  end
-  for i=p.car+1,5 do
-    spr(219,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
-  end
-  -- HP
-  rect(1,1,p.maxhp,6,0)
-  rectfill(2,2,p.hp-1,5,8)
+  -- -- HUD
+  -- -- Draw Carrots collected
+  -- for i=1,p.car do
+  --   spr(220,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
+  -- end
+  -- for i=p.car+1,5 do
+  --   spr(219,128+m.i*8-m.ox-i*8,m.j*8-m.oy)
+  -- end
+  -- -- HP
+  -- rect(1,1,p.maxhp,6,0)
+  -- rectfill(2,2,p.hp-1,5,8)
 end
 
--- Get next frame in animation
--- frame queue
-function getframe(ani)
-  return ani[flr(T/8)%#ani+1]
-end
 -->8
 -- main menu
 
@@ -350,8 +359,9 @@ function exp_upd()
   foreach(actors, function(s) s:up() end)
 
   -- Dummy way to enter combat
-  if pc.i==1 and pc.j==1 then
-    cmbt_ini()
+  if pc.i==1 and pc.j==1 and
+     pc.ox==0 and pc.oy==0 then
+    init_ini()
   end
 end
 
@@ -366,9 +376,6 @@ end
 function cmbt_ini()
   g.upd = cmbt_upd
   g.drw = cmbt_drw
-  rval = 21
-  rtime = 2
-  rcount = 0
   pturn = 1
   cmenu = {
     dr=menu_draw,
@@ -376,6 +383,8 @@ function cmbt_ini()
     s=0, -- selected option
     p=false -- option selected?
   }
+  -- Order by initiative
+  order_initiative(chars)
 end
 
 
@@ -396,7 +405,7 @@ function menu_draw(self)
   local line_start = 90;
   local line_delta = 10;
 
-  local act = actors[pturn]
+  local act = chars[pturn]
   print(act.name, 10, 80, 6)
 
   local opts = act.opts
@@ -409,6 +418,13 @@ function menu_draw(self)
     rectfill(3, line_start+line_delta*self.s, 7, line_start+self.s*line_delta+4, 6)
   else
     rect(3, line_start+line_delta*self.s, 7, line_start+self.s*line_delta+4, 6)
+  end
+
+  for i,c in ipairs(chars) do
+    c:dr((i-1)*10,0,0)
+    local dx = 0
+    if (c.ini < 10) dx=2
+    ?c.ini,(i-1)*10+dx,10,8
   end
 end
 
@@ -423,6 +439,7 @@ function menu_upd(self)
       end
     end
   else
+    -- Menu interaction
     if (btnp(⬆️)) self.s-=1
     if (btnp(⬇️)) self.s+=1
     self.s = self.s%4
@@ -511,82 +528,95 @@ function init_ini()
   g.upd = init_upd
   roll = false
   rtime = 1
-  rval = 21
+  rval = 20
   p = 0
-  for e in all(actors) do
-    e.ox = 0
-    e.oy = 0
-  end
+  dflash=0
+  foreach(actors, function(s) s:reset() end)
 end
 
 function init_drw()
-  draw_roll()
+  cls()
+  pcenter("press ❎ to roll",40)
+  -- draw roster
+  for i,c in ipairs(chars) do
+    c:dr(64+(i-1)*10,64)
+    local dx = 0
+    if (c.ini < 10) dx=2
+    ?c.ini,64+(i-1)*10+dx,73,8
+  end
+  -- draw d20
+  if rval==20 and dflash>0 then
+    pal(7,dflash)
+    dflash-=1
+  end
+  spr(192,16,56,2,4)
+  spr(192,31,56,2,4,true)
+  pal()
+  -- show number on d20
+  local rx = 28
+  if (rval<10) rx+=2
+  local rcolor = 10
+  if (not roll) rcolor=8
+  ?rval,rx,73,rcolor
+  if (roll and debug) ?"ROLLING",0,0
 end
 
 function init_upd()
-  if btnp(❎) and (not roll) then
-    roll=true
+  if btnp(❎) then
     rtime=1
+    roll=true
     p+=1
+    g.upd = rollad20
   end
-
-  if roll then
-    rollad(20)
-  end
-
-  -- done rolling init
-  if p == #actors and
-           not roll then
-    cmbt_ini()
-  end
+  -- +1 here helps us not change
+  -- screens immediately once
+  -- we roll the last char
+  if (p==#chars+1) cmbt_ini()
 end
 
-function rollad(num)
-  if T%rtime == 0 then
-    rval = flr(rnd(num)) + 1
-  end 
+-- Exponentially slow dice rolling
+function rollad20()
+  if (T%rtime==0) rval = flr(rnd(20)) + 1
 
-  if T%10 == 0 then
-    rtime*=2
-  end
+  if (T%10==0) rtime*=2 
 
-  if rtime > 127 then
+  if (rtime > 127) then
+    g.upd = init_upd
+    if (rval == 20) dflash=30
+    chars[p].ini = rval
     roll = false
-    actors[p].ini = rval
   end
 end
 
-function draw_roll()
-  local scrn_sz = 128;
-  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
-  rectfill(1, 87, 126, 126, 0)
-  -- Draw Roster
-  for i=0,#actors-1 do
-    local e = actors[i+1]
-    e:dr(64+i*10,92)
-    local dx = 0
-    if (e.ini < 10) dx=2
-    print(e.ini,64+i*10+dx,100,8)
-  end
-  -- Draw D20
-  spr(192,0,92,2,4)
-  spr(192,16,92,2,4,true)
-  -- Shifting print value for single digit values
-  if rval < 10 then
-    rx = 15
-  else
-    rx = 13
-  end
-  local rcolor = 10
-  if not roll then rcolor=8 end
-  print(rval,rx,109,rcolor)
-  -- print(rtime)
-  -- print(roll)
-end
 -->8
 -- credits
+
 -->8
 --tools
+
+function rollad(num)
+  return flr(rnd(num))+1
+end
+
+function order_initiative(a)
+  for i=1,#a do
+    local j = i
+    while (j > 1) and (a[j-1].ini < a[j].ini) do
+      a[j],a[j-1] = a[j-1],a[j]
+      j = j - 1
+    end
+  end
+end
+
+-- print string s to approx. 
+-- center of screen with y
+-- height and color c
+function pcenter(s,y,c)
+  y = y or 64
+  c = c or 7
+  ?s,64-4*(#s\2),y,c
+end
+
 --[[ 
   getdx and getdy are used to 
   simplify the button tracking
@@ -612,6 +642,11 @@ end
 
 function is_tile(tile_type,i,j)
   return fget(mget(i,j),tile_type)
+end
+
+function is_char(a)
+  return a.type=='pc' or 
+         a.type=='en'
 end
 
 function swap_tile(i,j)
