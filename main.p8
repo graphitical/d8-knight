@@ -51,6 +51,8 @@ function make_actor(sp,i,j)
   a.frame=0
   a.frames=1
   a.ini=0
+  a.up=function(s) end
+  a.dr=function(s) spr(a.sp,a.i*8,a.j*8) end
   add(actors,a)
   return a
 end
@@ -139,13 +141,7 @@ end
 
 function make_carrot()
   local span = 15
-  local c = make_actor(220,flr(rnd(span))+1,flr(rnd(span))+1)
-  c.dr=
-    function(s)
-      spr(s.sp,s.i*8,s.j*8)
-    end
-  c.up=function() end
-  return c
+  return make_actor(220,flr(rnd(span))+1,flr(rnd(span))+1)
 end
 
 function upd_en()
@@ -158,15 +154,20 @@ function draw_en(en,x,y)
   spr(en.sp,x,y)
 end
 
-function can_move(pc,di,dj)
-  local newi = pc.i+di
-  local newj = pc.j+dj
+function can_move(p,di,dj)
+  local newi = p.i+di
+  local newj = p.j+dj
   -- Is tile a "wall"?
   local t1 = not is_tile(0,newi,newj)
-  -- Are we trying to move 
+  -- Are we trying to move out
+  -- of bound?
   local t2 = (newi >= 0 and newi < m.w)
   local t3 = (newj >= 0 and newj < m.h)
-  return t1 and t2 and t3
+  -- Do we have movement left?
+  -- Only relevant for combat
+  local t4 = g.upd!=cmbt_upd and
+              #p.tail < p.mvmt
+  return t1 and t2 and t3 and t4
 end
 
 function move_pc(s,di,dj)
@@ -185,6 +186,8 @@ function move_pc(s,di,dj)
     s.oy = dj*4
   end
 
+  -- Slow collision/interaction
+  -- detection
   for e in all(actors) do
     if e != s then
       interact(s,e,s.i,s.j)
@@ -215,7 +218,6 @@ function upd_pc(p)
     p.oy+=2
     m = 1
   end
-  -- p.cani = (pc.cani + m)%4 + pc.ani[1]
   p.frame = p.frame + m
   p.frame = p.frame%p.frames
 end
@@ -371,46 +373,20 @@ function cmbt_ini()
   cmenu = {
     dr=menu_draw,
     up=menu_upd,
-    s=0,
-    p=false
+    s=0, -- selected option
+    p=false -- option selected?
   }
 end
 
 
 function cmbt_upd()
-  if cmenu.p then
-    local pc = actors[pturn]
-    -- Movement
-    if cmenu.s == 0 then
-      for i=0,3 do
-        if (btnp(i)) pc:cmv(getdx(i),getdy(i))
-      end
-    -- Attack
-    elseif cmenu.s==1 and cmenu.s==2 then
-      -- Placeholder
-    -- End Turn
-    elseif cmenu.s == 3 then
-      pc:et()
-      pturn = (pturn+1)%#actors + 1
-    end
-  end
-
-  for e in all(actors) do
-    e:up()
-  end
+  foreach(actors, function(s) s:up() end)
   cmenu:up()
 end
 
 function cmbt_drw()
-  for e in all(actors) do
-    e:dr()
-  end
-  -- draw menu
+  foreach(actors, function(s) s:dr() end)
   cmenu:dr()
-  if debug then
-    print('pturn-'..pturn,90,120,9)
-    -- print(cmenu.s)
-  end
 end
 
 function menu_draw(self)
@@ -437,8 +413,15 @@ function menu_draw(self)
 end
 
 function menu_upd(self)
+  -- If we've made a pick
   if self.p then
     if (btnp(❎)) self.p = false
+    -- Movement
+    if cmenu.s == 0 then
+      for i=0,3 do
+        if (btnp(i)) pc:mv(getdx(i),getdy(i))
+      end
+    end
   else
     if (btnp(⬆️)) self.s-=1
     if (btnp(⬇️)) self.s+=1
