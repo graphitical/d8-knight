@@ -404,17 +404,7 @@ end
 function cmbt_drw()
   -- draw actors
   foreach(actors, function(s) s:dr() end)
-
-  -- highlight enemies within range
-  if cmenu.p and 
-    (cmenu.s==1 or
-     cmenu.s==2) then
-      if (debug) ?#ens,0,0,9
-      for i,e in ipairs(ens) do
-        ants_box(e.i*8-1,e.j*8-1,9,9,8,(cmenu.ats+1)==i)
-      end
-  end
-
+  cmenu:dr()
   -- -- draw roster
   -- draw_box(0,0,22,#chars*10+1)
   -- for i,c in ipairs(chars) do
@@ -423,7 +413,6 @@ function cmbt_drw()
   --   if (c.ini < 10) dx+=2
   --   ?c.ini,dx,3+(i-1)*10,6
   -- end
-  cmenu:dr()
 end
 
 function menu_draw(self)
