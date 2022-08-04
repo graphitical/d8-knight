@@ -73,7 +73,7 @@ function make_actor(sp,i,j)
 end
 
 function make_pc()
-  local a = make_actor(236,0,1)
+  local a = make_actor(236,7,7)
   a.name='blue bunny'
   a.frames=4
   a.mvmt=8
@@ -433,8 +433,9 @@ function menu_draw(self)
 
   -- display movement left
   if (self.p and self.s==0) then
-    ?5*(chars[pturn].mvmt-#chars[pturn].tail),x+w+4,y-8,8
+    ?5*(chars[pturn].mvmt-#chars[pturn].tail),x+w+4,y-6,8
   end
+
 
 end
 
@@ -455,6 +456,7 @@ function menu_upd(self)
       pc:et()
       pturn=pturn%#chars + 1
       self.p = false
+      self.s=0
     end
   else
     -- Menu interaction
@@ -631,6 +633,13 @@ function text_box(s,x,y,w,h,ic,bc)
   bc = bc or 0
   draw_box(x,y,w,h,ic,bc)
   fit_string(s,x+3,y+h\2-6,w)
+end
+
+function ants_box(x,y,w,h,c)
+  c = c or 0x8 -- red
+  fillp(0x936c.936c>><(t()<<5&12) | 0x.8)
+  rect(x,y,x+w,y+h,c)
+  fillp()
 end
 
 -- Fits a string s into a
