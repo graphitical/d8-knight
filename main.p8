@@ -77,7 +77,7 @@ end
 
 function make_pc()
   local a = make_actor(34,7,7)
-  a.name='knight'
+  a.name="knight"
   a.frames=2
   a.dir=0
   a.mvmt=6
@@ -90,7 +90,10 @@ function make_pc()
   a.up=upd_pturn
   a.dr=draw_pc
   a.at=attack_pc
-  a.et=end_turn_pc
+  a.et=function(s)
+      a.bktrk=0
+      a.tail={}
+      end
   a.type='pc'
   a.opts=
     {'move',
@@ -402,16 +405,32 @@ function cmbt_ini()
   g.upd = cmbt_upd
   g.drw = cmbt_drw
   pturn = 1
-  cmenu = {
-    dr=menu_draw,
-    up=menu_upd,
-    p=false,
-    s=0, -- selected option
-    ats=1 
-  }
+  cmenu={}
+  cmenu.p=false
+  cmenu.s=0
+  cmenu.ats=1
+  cmenu.winds = {}
+  add(cmenu.winds,make_wind(0,110,64,16,6,5))
+  add(cmenu.winds,make_wind(64,110,64,16,7,0))
+  cmenu.drawers= {}
+  add(cmenu.drawers,make_wind(64+2,110,12,10,7,0))
   if (debug) pc.ini=69
   -- order by initiative
   order_initiative(chars)
+end
+
+function make_wind(x,y,w,h,ic,bc)
+  local d = {}
+  d.x,d.y=x,y
+  d.sx,d.sy=x,y
+  d.w,d.h=w,h
+  d.ic,d.bc=ic,bc
+  d.t = 0
+  d.dr=function(s,str)
+      str = str or ""
+      text_box(str,s.x,s.y+2,s.w,s.h,s.ic,s.bc)
+    end
+  return d
 end
 
 function cmbt_upd()
@@ -449,14 +468,14 @@ function cmbt_drw()
   foreach(actors, function(s) s:dr() end)
 
 -- highlight enemies within range
-  if cmenu.p and 
-    (cmenu.s==1 or
-     cmenu.s==2) then
-      if (debug) ?#ens,0,0,9
-      for i,e in ipairs(ens) do
-        ants_box(e.i*8-1,e.j*8-1,9,9,7,(cmenu.ats+1)==i)
-      end
-  end
+  -- if cmenu.p and 
+  --   (cmenu.s==1 or
+  --    cmenu.s==2) then
+  --     if (debug) ?#ens,0,0,9
+  --     for i,e in ipairs(ens) do
+  --       ants_box(e.i*8-1,e.j*8-1,9,9,7,(cmenu.ats+1)==i)
+  --     end
+  -- end
 
 -- draw roster
   -- draw_box(0,0,22,#chars*10+1)
@@ -468,15 +487,24 @@ function cmbt_drw()
   -- end
 
 -- draw menu
+  -- TODO: eliminate this hard coding
+  -- bring it into cmenu
   local x,y=0,112
   local w,h=64,128-y
-  text_box(cmenu.str,x,y,w,h,6,5)
+  cmenu.winds[1]:dr(cmenu.str)
 
-  if (cmenu.s==0) then
-    draw_box(x+w+2,y-8,11,h,7,0)
+  for i,d in ipairs(cmenu.drawers) do
+    if(cmenu.s+1==i) then
+      d.t=min(d.t+.1,1)
+    else
+      d.t=max(d.t-.1,0)
+    end
+    d.y=lerp(d.sy,d.sy-d.h+2,d.t)
+    d:dr(5*(pcurr.mvmt-#pcurr.tail))
   end
+
   -- action menu bgnd
-  draw_box(x+w,y,w,h,7,0)
+  cmenu.winds[2]:dr()
   -- action selection box
   local c = 9
   if (cmenu.p) c = 2
@@ -487,10 +515,6 @@ function cmbt_drw()
     spr(204+i,x+w+4+i*16,y+4)
   end
 
-  -- display movement left
-  if (cmenu.s==0) then
-    ?5*(pcurr.mvmt-#pcurr.tail),x+w+4,y-6,0
-  end
 end
 
 function move_upd()
@@ -518,69 +542,6 @@ function pc_path(pc)
   local y0 = pc.tail[n][2]*8
   rect(x0,y0,x0+7,y0+7,8)
  end
-end
-
-function end_turn_pc(pc)
- pc.tail = {}
- pc.bktrk = 0
-end
-
-function cmbt_menu(pc, s, cmbt_state)
-  local scrn_sz = 128;
-  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
-  rectfill(1, 87, 126, 126, 0)
-
-  local line_start = 90;
-  local line_delta = 10;
-
-  print(pc.name, 10, 80, 6)
-
-  local cmds = {"move ("..5*(pc.mvmt-#pc.tail).."/"..5*pc.mvmt..")", "melee attack",
-    "ranged attack", "end turn"}
-  for i=1,4 do
-    print(cmds[i], 10, line_start+(i-1)*line_delta, 6)
-  end
-
-  if (cmbt_state != cmbt_states.menu) then
-    rectfill(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
-  else
-    rect(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
-  end
-end
-
-
-function old_cmbt_upd()
-  for e in all(actors) do
-    if e.type=='pc' then
-      -- Menu select state
-        if cmbt_state == cmbt_states.menu then
-          if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
-          if (btnp(⬇️)) s = (s + 1) % 4
-          if (btnp(❎)) cmbt_state = s + 2
-        -- Movement State
-        elseif cmbt_state == cmbt_states.move then
-          if (btnp(⬅️)) e:move(-1, 0)
-          if (btnp(➡️)) e:move( 1, 0)
-          if (btnp(⬆️)) e:move( 0,-1)
-          if (btnp(⬇️)) e:move( 0, 1)
-          if (btnp(❎)) cmbt_state = cmbt_states.menu
-        -- TODO: Attack states. Items?
-        elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
-          -- Prevent backtracking if we've
-          -- already moved
-          if #e.tail > 0 then
-            e.bktrk = #e.tail
-          end
-          if (btnp(❎)) cmbt_state = cmbt_states.menu
-        elseif cmbt_state == cmbt_states.end_turn then
-          end_turn(e)
-          cmbt_state = cmbt_states.menu
-          s = 0
-        else
-          -- if (btnp(4)) cmbt_state = cmbt_states.menu
-        end
-      end
-  end
 end
 
 -- rolling initiative
@@ -654,6 +615,21 @@ end
 
 -->8
 --tools
+function easeinquad(t)
+  return t*t
+end
+function easeoutquad(t)
+  t-=1
+  return 1-t*t
+end
+function easeinoutquad(t)
+    if(t<.5) then
+        return t*t*2
+    else
+        t-=1
+        return 1-t*t*2
+    end
+end 
 function getbutt()
   for i=0,5 do
     if (btnp(i)) then
@@ -661,7 +637,6 @@ function getbutt()
     end
   end
   return -1
-  -- return 0
 end
 
 function lerp(a,b,t)
@@ -699,7 +674,7 @@ function text_box(s,x,y,w,h,ic,bc)
   ic = ic or 5
   bc = bc or 0
   draw_box(x,y,w,h,ic,bc)
-  fit_string(s,x+3,y+h\2-6,w)
+  fit_string(s,x+2,y+2,w-2)
 end
 
 function ants_box(x,y,w,h,c,an)
@@ -719,15 +694,15 @@ end
 function fit_string(s,x,y,w,d)
   d = d or " "
   local strs = split(s,d,false)
-  local cw = 0
+  local curr_width = 0
   local line = 0
   for str in all(strs) do
-    if (cw+4*#str > w) then
+    if (curr_width+4*#str >= w) then
       line+=1
-      cw = 0
+      curr_width = 0
     end
-    ?str,x+cw,y+6*line,0
-    cw+=5*#str
+    ?str,x+curr_width,y+6*line,0
+    curr_width+=5*#str
   end
 end
 
@@ -892,14 +867,14 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000007000000000000000000000000000000000000000000000000000000000000000000000000000000000000af000000006600000666820000e8
-0000000000000777000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff000000066600000046e8200e82
-0000000000077707000000000000000000000000000000000000000000000000000000000000000000000000000000000033300000006660000004060e82e820
-00000000077700070000000000000000000000000000000000000000000000000000000000000000000000000000000003033330000666000000400000e88200
-00000000770000070000000000000000000000000000000000000000000000000000000000000000000000000000000000033000555560000004000000e88200
-0000007770000007000000000000000000000000000000000000000000000000000000000000000000000000000000000040040001550000a9a000000e82e820
-000077700000000700000000000000000000000000000000000000000000000000000000000000000000000000000000040004000115000009900000e8200e82
-000770000000000700000000000000000000000000000000000000000000000000000000000000000000000000000000000004005005000040a00000820000e8
+0000000000000007000000000000000000000000000000000000000000000000000000000000000000000000000006660000af000000006600444440820000e8
+0000000000000777000000000000000000000000000000000000000000000000000000000000000000000000000000460000ff000000066600044400e8200e82
+0000000000077707000000000000000000000000000000000000000000000000000000000000000000000000000004060033300000006660000999900e82e820
+00000000077700070000000000000000000000000000000000000000000000000000000000000000000000000000400003033330000666000444444900e88200
+00000000770000070000000000000000000000000000000000000000000000000000000000000000000000000004000000033000555560004444444900e88200
+0000007770000007000000000000000000000000000000000000000000000000000000000000000000000000a9a000000040040001550000444444440e82e820
+000077700000000700000000000000000000000000000000000000000000000000000000000000000000000009900000040004000115000044444444e8200e82
+000770000000000700000000000000000000000000000000000000000000000000000000000000000000000040a00000000004005005000004444440820000e8
 00777777777777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0077000000000077000000000000000000000000000000000000000000000000000000000000000000000000000060000000b0000000b0000000000000000000
 0077000000000070000000000000000000000000000000000000000000000000000000000000000000000000000066000000bb000000bb000000000000000000
