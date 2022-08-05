@@ -7,6 +7,7 @@ actors = {}
 chars = {}
 ens = {}
 T = 0
+buttbuff=-1
 debug = true
 debug = false
 
@@ -53,10 +54,15 @@ function make_actor(sp,i,j)
   a.j=j or 1
   a.ox=0
   a.oy=0
+  a.sox=0
+  a.soy=0
   a.frame=0
   a.frames=1
+  a.mov=nil
+  a.delay=2
+  a.t=0
   a.ini=0
-  a.up=function(s) end
+  a.up=nil
   a.dr=function(s) 
     spr(a.sp,a.i*8,a.j*8) 
   end
@@ -71,7 +77,6 @@ end
 
 function make_pc()
   local a = make_actor(34,7,7)
-  -- a.name='blue bunny'
   a.name='knight'
   a.frames=2
   a.dir=0
@@ -82,7 +87,7 @@ function make_pc()
   a.tail={}
   a.bktrk=0
   a.mv=move_pc
-  a.up=upd_pc
+  a.up=upd_pturn
   a.dr=draw_pc
   a.at=attack_pc
   a.et=end_turn_pc
@@ -144,7 +149,7 @@ end
 
 function make_en()
   local s = 16
-  local a = make_actor(252,flr(rnd(s)),flr(rnd(s)))
+  local a = make_actor(30,flr(rnd(s)),flr(rnd(s)))
   a.name='enemy'
   a.maxhp=80
   a.hp=a.maxhp
@@ -161,7 +166,10 @@ end
 function draw_en(en,x,y)
   x = x or en.i*8
   y = y or en.j*8
+  palt(10,true)
+  palt(0,false)
   spr(en.sp,x,y)
+  pal()
 end
 
 function can_move(p,di,dj)
@@ -189,64 +197,72 @@ function can_move(p,di,dj)
   return test
 end
 
-function move_pc(s,di,dj)
+function move_pc(p,di,dj)
   -- check for solid and we also
   -- wait for the map to stop
   -- animating
-  if can_move(s,di,dj) and
+  if can_move(p,di,dj) and
       m.ox == 0 and
-      m.oy == 0 and
-      (di != 0 or
-      dj != 0) then
+      m.oy == 0 then
     -- we only track the tail
-    -- during combat
-    if (g.upd == cmbt_upd) then
-      track_tail(s,di,dj)
+    -- during combat also
+    -- combat has sub-states so
+    -- we check for draw to see
+    -- if we are in combat
+    if (g.drw == cmbt_drw) then
+      track_tail(p,di,dj)
     end
-    -- TODO: come back and clean this
-    s.i+=di
-    s.j+=dj
-    s.ox = -di*8
-    s.oy = -dj*8
-  else -- bounce
-    s.ox = di*2
-    s.oy = dj*2
+    pcurr.i+=di
+    pcurr.j+=dj
+    pcurr.sox,pcurr.soy = -di*8,-dj*8
+    pcurr.mov = mov_walk
+    pcurr.ox,pcurr.oy=pcurr.sox,pcurr.soy
+  else -- bump
+    pcurr.sox = di*6
+    pcurr.soy = dj*6
+    pcurr.ox,pcurr.oy=0,0
+    pcurr.mov = mov_bump
   end
+  -- TODO: come back and clean this
+  -- maybe something with bitfield?
   -- adjust sprite dir
-  if (di==-1) s.dir=0
-  if (di==1) s.dir=1
-  if (dj==1) s.dir=2
-  if (dj==-1) s.dir=3
+  if (di==-1) pcurr.dir=0
+  if (di==1)  pcurr.dir=1
+  if (dj==1)  pcurr.dir=2
+  if (dj==-1) pcurr.dir=3
 
-  -- slow collision/interaction
-  -- detection
-  for e in all(actors) do
-    if e != s then
-      interact(s,e,s.i,s.j)
-    end
+  -- animate
+  g.upd=upd_pturn
+end
+
+function upd_pturn()
+  -- check for button presses while animating
+  if (buttbuff<0) buttbuff=getbutt()
+  -- animate
+  pcurr.t=min(pcurr.t+0.125,1)
+  pcurr:mov()
+  if (pcurr.t>=1) then
+    g.upd=move_upd
+    pcurr.t=0
   end
 end
 
-function upd_pc(p)
-  if p.ox==0 and p.oy==0 then
-    p.frame=0
-    return
-  end
-  local m = 0
-  if (p.ox > 0) then
-    p.ox-=1
-  end
-  if (p.ox < 0) then
-    p.ox+=1
-  end
-  if (p.oy > 0) then
-    p.oy-=1
-  end
-  if (p.oy < 0) then
-    p.oy+=1
-  end
-  p.frame = (p.frame+1)%p.frames
+function mov_walk(self)
+  local n = 4 -- anim cycles
+  self.ox=self.sox*(1-self.t)
+  self.oy=self.soy*(1-self.t)
+  self.frame=(self.t*n)%self.frames
 end
+
+function mov_bump(self)
+ local tme = self.t
+  local n = 4 -- anim cycles
+  if (tme>0.5) tme=1-tme
+  self.ox=self.sox*tme
+  self.oy=self.soy*tme
+  self.frame=(self.t*n)%self.frames
+end
+
 
 function track_tail(c,di,dj)
   local newx,newy=c.i+di,c.j+dj
@@ -275,13 +291,6 @@ function draw_pc(p,x,y,f)
   x = x or (p.i*8+p.ox)
   y = y or (p.j*8+p.oy)
   f = f or p.frame
-  if debug then
-    pal(12,7)
-    spr(p.sp+f,p.i*8,p.j*8)
-    pal()
-  end
-  palt(10,true) -- remove yellow
-  palt(0,false) -- allow black
   -- TODO: God this is ugly
   -- Please come clean this up
   -- There might be something
@@ -291,9 +300,21 @@ function draw_pc(p,x,y,f)
   local q = 0
   if (d==2) q+=2
   if (d==3) q+=4
+  if debug then
+    ?"dir: "..d..", ox: "..p.ox..", oy: "..p.oy,0,0,7
+  end
+  if debug then
+    palt(10,true) -- remove yellow
+    palt(0,false) -- allow black
+    pal(6,3)
+    pal(7,11)
+    spr(p.sp+q+f,p.i*8,p.j*8,1,1,d==0)
+    pal()
+  end
+  palt(10,true)
+  palt(0,false)
   spr(p.sp+q+f,x,y,1,1,d==0)
-  palt()
-  render_path(p)
+  pal()
   -- -- HUD
   -- -- HP
   -- rect(1,1,p.maxhp,6,0)
@@ -384,36 +405,60 @@ function cmbt_ini()
   cmenu = {
     dr=menu_draw,
     up=menu_upd,
+    p=false,
     s=0, -- selected option
-    p=false, -- option selected?
-    ats=1 --
+    ats=1 
   }
-  if (debug) pc.ini=21
-  -- Order by initiative
+  if (debug) pc.ini=69
+  -- order by initiative
   order_initiative(chars)
 end
 
-
 function cmbt_upd()
-  foreach(actors, function(s) s:up() end)
-  cmenu:up()
+  pcurr = chars[pturn]
+  cmenu.str="what will "..pcurr.name.." do?"
+  cmenu.p=false
+
+  -- get button input
+  if(buttbuff<0) buttbuff=getbutt()
+
+-- menu selection
+  -- no button input
+  if (buttbuff<0) return
+
+  -- scroll through combat opts
+  if buttbuff>=0 and buttbuff<4 then
+    cmenu.s+=dirx[buttbuff+1]
+    cmenu.s=cmenu.s%#pcurr.opts
+  end
+
+  -- enter/exit selection mode
+  if buttbuff==5 then
+    cmenu.p=true
+    if (cmenu.s == 0) g.upd = move_upd
+    -- if (self.s == 1 or self.s==2) g.up = att_upd
+    -- if (self.s==3) g.upd = end_turn_pc
+  end
+  buttbuff=-1
 end
 
 function cmbt_drw()
-  -- draw actors
+  -- ?mybutt,0,0
+-- actors
+  pc_path(pcurr)
   foreach(actors, function(s) s:dr() end)
 
-  -- highlight enemies within range
+-- highlight enemies within range
   if cmenu.p and 
     (cmenu.s==1 or
      cmenu.s==2) then
       if (debug) ?#ens,0,0,9
       for i,e in ipairs(ens) do
-        ants_box(e.i*8-1,e.j*8-1,9,9,8,(cmenu.ats+1)==i)
+        ants_box(e.i*8-1,e.j*8-1,9,9,7,(cmenu.ats+1)==i)
       end
   end
 
-  -- -- draw roster
+-- draw roster
   -- draw_box(0,0,22,#chars*10+1)
   -- for i,c in ipairs(chars) do
   --   c:dr(3,1+(i-1)*10,0)
@@ -421,73 +466,50 @@ function cmbt_drw()
   --   if (c.ini < 10) dx+=2
   --   ?c.ini,dx,3+(i-1)*10,6
   -- end
-  cmenu:dr()
-end
 
-function menu_draw(self)
+-- draw menu
   local x,y=0,112
   local w,h=64,128-y
-  text_box(self.str,x,y,w,h,6,5)
-  -- text_box("what will "..chars[pturn].name.." do?",
-  --         x,y,w,h,6,5)
+  text_box(cmenu.str,x,y,w,h,6,5)
 
+  if (cmenu.s==0) then
+    draw_box(x+w+2,y-8,11,h,7,0)
+  end
   -- action menu bgnd
   draw_box(x+w,y,w,h,7,0)
-  -- draw action selection box
-  draw_box(x+w+2+self.s*16,y+2,12,12,7,9)
+  -- action selection box
+  local c = 9
+  if (cmenu.p) c = 2
+  draw_box(x+w+2+cmenu.s*16,y+2,12,12,7,c)
 
-  -- draw sprites for actions
-  -- The line below will allow
-  -- us to only draw the action
-  -- that we selected.
-  -- ??? IDK if we want this for
-  -- some reason
-  -- for i=(self.p and self.s or 0),(self.p and self.s or 3) do
+  -- sprites for actions
   for i=0,3 do
     spr(204+i,x+w+4+i*16,y+4)
   end
 
   -- display movement left
-  if (self.p and self.s==0) then
-    ?5*(chars[pturn].mvmt-#chars[pturn].tail),x+w+4,y-6,8
+  if (cmenu.s==0) then
+    ?5*(pcurr.mvmt-#pcurr.tail),x+w+4,y-6,0
   end
 end
 
-function menu_upd(self)
-  -- If we've made a pick
-  if self.p then
-    if (btnp(❎)) self.p = false
-    -- Movement
-    if cmenu.s == 0 then
-      pc:mv(getlr(),getud())
-      self.str=chars[pturn].name.." is moving!"
-    -- Attacks
-    elseif cmenu.s==1 or
-           cmenu.s==2 then
-      self.str="select an enemy"
-      local r = 1
-      if (cmenu.s==2) r=6
-      find_enemies(r)
-      self.ats=(self.ats+getud())%#ens
-    elseif cmenu.s==3 then
-      pc:et()
-      pturn=pturn%#chars + 1
-      self.p = false
-      self.s=0
-    end
-  else
-    -- Menu interaction
-    if (btnp(0)) self.s-=1
-    if (btnp(1)) self.s+=1
-    self.s = self.s%#pc.opts
-    if (btnp(❎)) self.p=true
-    ens={}
-    self.str = "what will "..chars[pturn].name.." do?"
+function move_upd()
+  cmenu.str=pcurr.name.." is on the move!"
+  if (buttbuff<0) buttbuff=getbutt()
+
+  if buttbuff>=0 and buttbuff<4 then
+    pcurr:mv(dirx[buttbuff+1],diry[buttbuff+1])
   end
+
+  if (buttbuff==5) then
+    g.upd=cmbt_upd
+  end
+
+  buttbuff=-1
 end
 
 
-function render_path(pc)  
+function pc_path(pc)  
  if #pc.tail == 0 then
   return
  end
@@ -632,8 +654,18 @@ end
 
 -->8
 --tools
+function getbutt()
+  for i=0,5 do
+    if (btnp(i)) then
+      return i
+    end
+  end
+  return -1
+  -- return 0
+end
+
 function lerp(a,b,t)
-  return a*(1-t) + b*T
+  return a*(1-t) + b*t
 end
 
 function in_range(x0,y0,x1,y1,r)
@@ -676,7 +708,6 @@ function ants_box(x,y,w,h,c,an)
   if an then
     bf = bf>><(t()<<5&12) | 0x0.8
   end
-  -- fillp(0x936c.936c>><(t()<<5&12) | 0x.8)
   fillp(bf)
   rect(x,y,x+w,y+h,c)
   fillp()
@@ -761,6 +792,9 @@ function interact(e1,e2,i,j)
   return false
 end
 
+dirx={-1,1,0,0}
+diry={0,0,-1,1}
+
 __gfx__
 000000000000000088e8800088e8800008e8880008e8880c00888e80c0888e800000000000000000000000000000000008e888000088000008e8880000880000
 000000000000000008ee880c08ee880008ee880c08ee8804c088ee804088ee800000000000000000000000000000000008ee880c08e8880008ee880c08e88800
@@ -770,14 +804,14 @@ __gfx__
 0070070000000000f8ee88000fee88f008ee880008ee88000088ee800088ee8000000000000000000000000000000000f8ee880008ee88f0f8ee880008ee88f0
 00000000000000000888880008888800088888808888880008888880008888880000000000000000000000000000000008888800088888000888880008888800
 00000000000000008888880088888880888800000000888000008888088800000000000000000000000000000000000088888880888888808888888088888880
-000000000000000033bb30e0033b300003bb300f03bb3000f0033b3000033b300000000000000000000000000000000000000000000000000511556005115506
-000000000000000003bbb30f33bbb3f003bbb30f03bbb30ff033bb30f033bb300000000000000000000000000000000000000000000000000510506005105006
-00000000000000000340400f034040f00404040f0404040ff0433340f04333400000000000000000000000000000000000000000000000000550506005505006
-00000000000000000144440f014444f0044444340444440f43443340f04334400000000000000000000000000000000000000000000000000555556005555506
-000000000000000033bbb33403bbb34033bbb30e33bbb334e03bbb33433bbb330000000000000000000000000000000000000000000000000444155044411555
-00000000000000004555650e045565e04555650e0555650ee0565554e05655500000000000000000000000000000000000000000000000000404526040455206
-00000000000000000333330e033333e00323330e0333230ee0333230e03233300000000000000000000000000000000000000000000000000444550044455500
-0000000000000000002020e002000200000020000020000e00020000e00002000000000000000000000000000000000000000000000000000200020000202000
+000000000000000033bb30e0033b300003bb300f03bb3000f0033b3000033b30000000000000000000000000000000000000000000000000a51155a6a511556a
+000000000000000003bbb30f33bbb3f003bbb30f03bbb30ff033bb30f033bb30000000000000000000000000000000000000000000000000a51050a6a510506a
+00000000000000000340400f034040f00404040f0404040ff0433340f0433340000000000000000000000000000000000000000000000000a55050a6a550506a
+00000000000000000144440f014444f0044444340444440f43443340f0433440000000000000000000000000000000000000000000000000a55555a6a555556a
+000000000000000033bbb33403bbb34033bbb30e33bbb334e03bbb33433bbb3300000000000000000000000000000000000000000000000044411555a444155a
+00000000000000004555650e045565e04555650e0555650ee0565554e0565550000000000000000000000000000000000000000000000000404552a6a404526a
+00000000000000000333330e033333e00323330e0333230ee0333230e0323330000000000000000000000000000000000000000000000000444555aaa44455aa
+0000000000000000002020e002000200000020000020000e00020000e0000200000000000000000000000000000000000000000000000000aa2a2aaaa2aaa2aa
 0000000000000000a67766a5a677665aa67766a5a67766a55a66776a5a66776a0000000000000000000000000000000000000000000000000000000000000000
 0000000000000000a67060a5a670605aa60606a5a60606a55a66666a5a66666a0000000000000000000000000000000000000000000000000000000000000000
 0000000000000000a66060a5a660605aa60606a5a60606a55a66666a5a66666a0000000000000000000000000000000000000000000000000000000000000000
