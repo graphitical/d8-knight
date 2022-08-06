@@ -2,101 +2,144 @@ pico-8 cartridge // http://www.pico-8.com
 version 36
 __lua__
 -- main
-g = {} -- games state
-actors = {}
-chars = {}
-ens = {}
-T = 0
-buttbuff=-1
-debug = true
-debug = false
 
 function _init()
+-- global tables for game
+-- can be modified by game
+-- state ini functions
+  g = {} -- games state
+  actors = {}
+  chars = {}
+  ens = {}
+  winds = {}
+
+-- useful parameters 
   T = 0
+  timer = 0
+  dt = 0
+  buttbuff=-1
+  debug = true
+  debug = false
+  fps = 30
+
+-- making roster
   pc = make_pc()
   m = make_map()
   for i=1,4 do
     make_en()
   end
+
+  chars = {pc}
+
   -- mmenu_ini()
   -- exp_ini()
   -- init_ini()
   cmbt_ini()
-
-  -- Filter actors for only 
-  -- combat
-  for a in all(actors) do
-    if (is_char(a)) add(chars, a)
-  end
-
 end
 
 function _update()
   T+=1
-  m:up()
+  -- m:up()
+  foreach(actors, move_actor)
+  foreach(winds, move_actor)
   g.upd()
 end
 
 function _draw()
   cls()
   m:dr()
+  foreach(actors, draw_actor)
+  foreach(winds, draw_wind)
   g.drw()
 end
 
 -- make an actor
 -- add it to global collection
--- i,j means center of actor
--- in map coordinates
-function make_actor(sp,i,j)
-  local a = {}
-  a.sp=sp
-  a.i=i or 0
-  a.j=j or 1
-  a.ox=0
-  a.oy=0
-  a.sox=0
-  a.soy=0
-  a.frame=0
-  a.frames=1
-  a.mov=nil
-  a.delay=2
-  a.t=0
+-- x,y are pixel coordinates of
+-- actor
+function make_actor(_sp,_x,_y)
+  a = {}
+  a.sp=_sp or nil
+  a.spo=0 -- sprite offset
+  a.x=_x or 0
+  a.y=_y or 1
+  a.tx,a.ty=_x,_y
+  a.dx,a.dy=0,0
+  a.ox,a.oy=0,0
+  a.t,a.tdur=0,0
+  a.easef=linear
+  a.frame,a.frames=0,1
+  a.anim,a.cycles=0,2
+  a.flip = false
   a.ini=0
-  a.up=nil
-  a.dr=function(s) 
-    spr(a.sp,a.i*8,a.j*8) 
-  end
-  a.reset=function(s) 
-    s.frame=0
-    s.ox=0
-    s.oy=0
-  end
+  a.ct=0
+  a.i=function(s) return s.x\8 end
+  a.j=function(s) return s.y\8 end
   add(actors,a)
   return a
 end
 
+function draw_actor(_a)
+  local sp,spo,f = _a.sp,_a.spo,_a.frame
+  local x,y    = _a.x,_a.y
+  if _a.ct>0 then
+    palt(_a.ct,true)
+    palt(0,false)
+  end
+  spr(sp+spo+f,x,y,1,1,_a.flip)
+  pal()
+end
+
+function set_actor_tween(_a,_x,_y,_d,_type)
+  if (_a.anim!=0) return
+
+  _a.tx,_a.ty = _x,_y
+  _a.tdur=flr(_d*fps)
+  _a.dx,_a.dy = (_a.tx-_a.x),(_a.ty-_a.y)
+  _a.ox,_a.oy = _a.x,_a.y
+  _a.anim = _type
+end
+
+function move_actor(_a)
+  if (flr(_a.tdur) <= 0) return
+
+  local tme = _a.t
+  -- bump animation
+  if _a.anim==2 and tme>_a.tdur\2 then
+    tme = _a.tdur - tme
+  end
+
+  _a.x = _a.easef(tme,_a.ox,_a.dx,_a.tdur)
+  _a.y = _a.easef(tme,_a.oy,_a.dy,_a.tdur)
+  _a.frame=(tme*_a.cycles\_a.tdur)%_a.frames
+
+  _a.t+=1
+  
+  if(_a.t > _a.tdur) then
+    _a.dx,_a.dy  = 0,0
+    _a.ox,_a.oy  = 0,0
+    _a.tx,_a.ty  = 0,0
+    _a.t,_a.tdur = 0,0
+    _a.frame    = 0
+    _a.anim = 0
+  end
+end
+
 function make_pc()
-  local a = make_actor(34,7,7)
-  a.name='knight'
+  a = make_actor(34,7*8,7*8)
+  a.name="the knight"
+  a.ct=10
   a.frames=2
-  a.dir=0
   a.mvmt=6
   a.ini=23
   a.maxhp=40
   a.hp=a.maxhp
   a.tail={}
   a.bktrk=0
-  a.mv=move_pc
-  a.up=upd_pturn
-  a.dr=draw_pc
-  a.at=attack_pc
-  a.et=end_turn_pc
   a.type='pc'
-  a.opts=
-    {'move',
-     'melee attack',
-     'ranged attack',
-     'end turn'}
+  a.opts={204, 205, 206, 207}
+  a.attack=0
+  a.attacks={205, 221,220,235}
   return a
 end
 
@@ -149,177 +192,41 @@ end
 
 function make_en()
   local s = 16
-  local a = make_actor(30,flr(rnd(s)),flr(rnd(s)))
+  local a = make_actor(30,flr(rnd(s))*8,flr(rnd(s))*8)
   a.name='enemy'
   a.maxhp=80
   a.hp=a.maxhp
-  a.up=upd_en
-  a.dr=draw_en
+  a.ct=10 -- transparent color
   a.type='en'
   return a
 end
 
-function upd_en()
---placeholder
+-- windows
+function make_wind(x,y,w,h,ic,bc)
+  _w = make_actor(nil,x,y)
+  del(actors,_w)-- hacky way to keep window from showin up in actors list
+  -- anim params
+  _w.x,_w.y,_w.tx,_w.ty=x,y,x,y
+  _w.ox,_w.oy,_w.dx,_w.dy=0,0,0,0
+  _w.cx,_w.cy=x,y
+  _w.t,_w.tdur = 0,0
+  -- dra_wg params
+  _w.w,_w.h=w,h
+  _w.ic,_w.bc=ic,bc
+  
+  add(winds,_w)
+  return _w
 end
 
-function draw_en(en,x,y)
-  x = x or en.i*8
-  y = y or en.j*8
-  palt(10,true)
-  palt(0,false)
-  spr(en.sp,x,y)
-  pal()
-end
-
-function can_move(p,di,dj)
-  local newi = p.i+di
-  local newj = p.j+dj
-  -- Is tile a "wall"?
-  local test = not is_tile(0,newi,newj)
-  -- Are we trying to move out
-  -- of bound?
-  test = test and (newi >= 0 and newi < m.w)
-  test = test and (newj >= 0 and newj < m.h)
-  -- Do we have movement left?
-  -- Only relevant for combat
-  test = test and (p.mvmt - #p.tail) > 0
-  -- Edge case, need to check if
-  -- backtracking our path
-  if not test then
-    for p in all(p.tail) do
-      test = p[1] == newi
-      test = test and (p[2] == newj)
-      if (test) break
-    end
-  end
-
-  return test
-end
-
-function move_pc(p,di,dj)
-  -- check for solid and we also
-  -- wait for the map to stop
-  -- animating
-  if can_move(p,di,dj) and
-      m.ox == 0 and
-      m.oy == 0 then
-    -- we only track the tail
-    -- during combat also
-    -- combat has sub-states so
-    -- we check for draw to see
-    -- if we are in combat
-    if (g.drw == cmbt_drw) then
-      track_tail(p,di,dj)
-    end
-    pcurr.i+=di
-    pcurr.j+=dj
-    pcurr.sox,pcurr.soy = -di*8,-dj*8
-    pcurr.mov = mov_walk
-    pcurr.ox,pcurr.oy=pcurr.sox,pcurr.soy
-  else -- bump
-    pcurr.sox = di*6
-    pcurr.soy = dj*6
-    pcurr.ox,pcurr.oy=0,0
-    pcurr.mov = mov_bump
-  end
-  -- TODO: come back and clean this
-  -- maybe something with bitfield?
-  -- adjust sprite dir
-  if (di==-1) pcurr.dir=0
-  if (di==1)  pcurr.dir=1
-  if (dj==1)  pcurr.dir=2
-  if (dj==-1) pcurr.dir=3
-
-  -- animate
-  g.upd=upd_pturn
-end
-
-function upd_pturn()
-  -- check for button presses while animating
-  if (buttbuff<0) buttbuff=getbutt()
-  -- animate
-  pcurr.t=min(pcurr.t+0.125,1)
-  pcurr:mov()
-  if (pcurr.t>=1) then
-    g.upd=move_upd
-    pcurr.t=0
-  end
-end
-
-function mov_walk(self)
-  local n = 4 -- anim cycles
-  self.ox=self.sox*(1-self.t)
-  self.oy=self.soy*(1-self.t)
-  self.frame=(self.t*n)%self.frames
-end
-
-function mov_bump(self)
- local tme = self.t
-  local n = 4 -- anim cycles
-  if (tme>0.5) tme=1-tme
-  self.ox=self.sox*tme
-  self.oy=self.soy*tme
-  self.frame=(self.t*n)%self.frames
+function draw_wind(_w)
+  local str   = _w.str
+  local sx,sy = _w.x,_w.y
+  local w,h   = _w.w,_w.h
+  local ic,bc = _w.ic,_w.bc
+  text_box(str,sx,sy,w,h,ic,bc)
 end
 
 
-function track_tail(c,di,dj)
-  local newx,newy=c.i+di,c.j+dj
-  local nw_tail = {}
-  for p in all(c.tail) do
-    if newx==p[1] and
-       newy==p[2] and
-       c.bktrk == 0 then
-      break
-    end
-    add(nw_tail,p)
-  end
-
-  if #nw_tail >= #c.tail then
-    add(nw_tail, {c.i, c.j})
-  end
-
-  c.tail = nw_tail
-
-end
-
--- Draws pc to screen
--- If x,y,f are provided then
--- drawn image will be static
-function draw_pc(p,x,y,f)
-  x = x or (p.i*8+p.ox)
-  y = y or (p.j*8+p.oy)
-  f = f or p.frame
-  -- TODO: God this is ugly
-  -- Please come clean this up
-  -- There might be something
-  -- better to do with dir and
-  -- the sprite order
-  local d = p.dir
-  local q = 0
-  if (d==2) q+=2
-  if (d==3) q+=4
-  if debug then
-    ?"dir: "..d..", ox: "..p.ox..", oy: "..p.oy,0,0,7
-  end
-  if debug then
-    palt(10,true) -- remove yellow
-    palt(0,false) -- allow black
-    pal(6,3)
-    pal(7,11)
-    spr(p.sp+q+f,p.i*8,p.j*8,1,1,d==0)
-    pal()
-  end
-  palt(10,true)
-  palt(0,false)
-  spr(p.sp+q+f,x,y,1,1,d==0)
-  pal()
-  -- -- HUD
-  -- -- HP
-  -- rect(1,1,p.maxhp,6,0)
-  -- rectfill(2,2,p.hp-1,5,8)
-end
 
 -->8
 -- main menu
@@ -372,7 +279,7 @@ function ctscn_drw()
  print(s)
 end
 -->8
--- non-combat exploration
+-- general exploration
 function exp_ini()
   g.upd = exp_upd
   g.drw = exp_drw
@@ -401,113 +308,251 @@ end
 function cmbt_ini()
   g.upd = cmbt_upd
   g.drw = cmbt_drw
-  pturn = 1
-  cmenu = {
-    dr=menu_draw,
-    up=menu_upd,
-    p=false,
-    s=0, -- selected option
-    ats=1 
-  }
+
+-- combat menu
+  local x,y,w,h=64,112,64,16
+  winds={} -- clear winds for combat
+  -- text window
+  wtext=make_wind(0,y,w,h,6,5)
+  -- action bins
+  bins={}
+  wmvtxt=make_wind(x+2,y,h-4,h-6,7,0)
+  wmvtxt.open = false
+  bins['wmvtxt']=wmvtxt
+  -- action menu bgnd
+  wbgnd=make_wind(x,y,w,h,7,0)
+  wbgnd.str=""
+  -- action menu selection wind
+  wsel=make_wind(x+2,y+2,h-4,h-4,7,9)
+  wsel.s=0
+  wsel.str=""
+  
+-- enemy selection
+  ens={}
+  enp=nil
+
+-- initiative order
   if (debug) pc.ini=69
   -- order by initiative
   order_initiative(chars)
+  pturn = 1
+  pcurr = chars[pturn]
 end
 
 function cmbt_upd()
-  pcurr = chars[pturn]
-  cmenu.str="what will "..pcurr.name.." do?"
-  cmenu.p=false
+  wtext.str="what will "..pcurr.name.." do?"
+  wmvtxt.str=5*(pcurr.mvmt-#pcurr.tail)
 
   -- get button input
   if(buttbuff<0) buttbuff=getbutt()
 
--- menu selection
   -- no button input
   if (buttbuff<0) return
 
-  -- scroll through combat opts
-  if buttbuff>=0 and buttbuff<4 then
-    cmenu.s+=dirx[buttbuff+1]
-    cmenu.s=cmenu.s%#pcurr.opts
+-- menu selection
+  -- scroll lr through combat opts
+  if buttbuff==0 or buttbuff==1 then
+    wsel.s=(wsel.s+dirx[buttbuff+1])%#pcurr.opts
+    wsel.x = wsel.cx+wsel.s*16
   end
 
-  -- enter/exit selection mode
+  -- enter selected modes
   if buttbuff==5 then
-    cmenu.p=true
-    if (cmenu.s == 0) g.upd = move_upd
-    -- if (self.s == 1 or self.s==2) g.up = att_upd
-    -- if (self.s==3) g.upd = end_turn_pc
+    if wsel.s==0 then
+      bsel = bins['wmvtxt']
+      binoc(bsel)
+      g.upd = cmbt_move_upd
+    elseif wsel.s==1 then
+      ens = find_actors(pcurr,1,'en')
+      enp = 0
+      g.upd = cmbt_attk_upd
+    end
   end
+
+  -- TODO: move to own cmbt_attk_upd function
+  -- scroll through attack opts
+  -- if selwin.s==1 then
+  --   -- 2 => +1 shift
+  --   -- 3 => -1 shift
+  --   if (buttbuff==2 or buttbuff==3) pcurr:rot_att(-2*(buttbuff%2)+1)
+  -- end
+
   buttbuff=-1
+
 end
 
 function cmbt_drw()
-  -- ?mybutt,0,0
--- actors
   pc_path(pcurr)
-  foreach(actors, function(s) s:dr() end)
 
--- highlight enemies within range
-  if cmenu.p and 
-    (cmenu.s==1 or
-     cmenu.s==2) then
-      if (debug) ?#ens,0,0,9
-      for i,e in ipairs(ens) do
-        ants_box(e.i*8-1,e.j*8-1,9,9,7,(cmenu.ats+1)==i)
-      end
-  end
-
--- draw roster
-  -- draw_box(0,0,22,#chars*10+1)
-  -- for i,c in ipairs(chars) do
-  --   c:dr(3,1+(i-1)*10,0)
-  --   local dx = 12
-  --   if (c.ini < 10) dx+=2
-  --   ?c.ini,dx,3+(i-1)*10,6
-  -- end
-
--- draw menu
-  local x,y=0,112
-  local w,h=64,128-y
-  text_box(cmenu.str,x,y,w,h,6,5)
-
-  if (cmenu.s==0) then
-    draw_box(x+w+2,y-8,11,h,7,0)
-  end
-  -- action menu bgnd
-  draw_box(x+w,y,w,h,7,0)
-  -- action selection box
-  local c = 9
-  if (cmenu.p) c = 2
-  draw_box(x+w+2+cmenu.s*16,y+2,12,12,7,c)
-
+  -- ??? maybe should be part of window?
   -- sprites for actions
-  for i=0,3 do
-    spr(204+i,x+w+4+i*16,y+4)
+  for i,s in ipairs(pcurr.opts) do
+    spr(s,wbgnd.x+4+(i-1)*16,wbgnd.y+4)
   end
 
-  -- display movement left
-  if (cmenu.s==0) then
-    ?5*(pcurr.mvmt-#pcurr.tail),x+w+4,y-6,0
+  -- marching ants for attack select
+  if g.upd==cmbt_attk_upd then
+    for i,e in ipairs(ens) do
+        ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
+    end
   end
 end
 
-function move_upd()
-  cmenu.str=pcurr.name.." is on the move!"
+-- set the correct sprite for 
+-- actor a, based on direction
+-- di and dj. assumes particualar
+-- sprite order of 2 frame motion
+-- with right, up, down
+function actor_dir(_a,_di,_dj)
+    if _dj > 0 then
+      _a.spo = 2
+    elseif _dj < 0 then
+      _a.spo = 4
+    else
+      _a.spo = 0
+    end
+    _a.flip = _di < 0
+end
+
+-- loops while we are running through
+-- combat motion
+function cmbt_move_upd()
+  local p = pcurr
+  wtext.str=p.name.." is on the move!"
+  wmvtxt.str=5*(p.mvmt-#p.tail)
   if (buttbuff<0) buttbuff=getbutt()
 
+  -- listen for arrow keys to move
   if buttbuff>=0 and buttbuff<4 then
-    pcurr:mv(dirx[buttbuff+1],diry[buttbuff+1])
+    local di,dj=dirx[buttbuff+1],diry[buttbuff+1]
+    actor_dir(p,di,dj)
+    if can_move(p,di,dj) and
+        pcurr.anim==0 then
+      if g.drw == cmbt_drw then
+        track_tail(p,di,dj)
+      end
+      -- walk
+      set_actor_tween(p,p.x+8*di,p.y+8*dj,0.125,1)
+    else
+      -- bump
+      set_actor_tween(p,p.x+8*di,p.y+8*dj,0.125,2)
+    end
   end
 
+  -- done with motion
   if (buttbuff==5) then
+    binoc(bsel)
+    bsel = nil
     g.upd=cmbt_upd
   end
 
   buttbuff=-1
 end
 
+-- loops while we are handling combat attack
+function cmbt_attk_upd()
+  local p = pcurr
+
+  if (buttbuff<0) buttbuff=getbutt()
+  
+  if enp!=nil then
+    if #ens==0 then
+      wtext.str="no enemies within range"
+      enp=nil
+      timer = 0
+    else
+      wtext.str="❎confirm 🅾️cancel"
+      -- cycle through enemies
+      -- within range
+      if buttbuff==2 or buttbuff==3 then
+        enp+=diry[buttbuff+1]
+        enp=enp%#ens
+      end
+    end
+  else
+    -- if no enemies then wait 30
+    -- frames before releasing 
+    -- to player so they have
+    -- time to read msg
+    if timer>30 then
+      g.upd=cmbt_upd
+    end
+    timer+=1
+  end
+
+  if buttbuff==4 then
+    -- cancel
+    g.upd = cmbt_upd
+  elseif buttbuff==5 then
+    -- complete attack
+    attack(p,ens[enp+1])
+    g.upd=cmbt_upd
+  end
+
+  buttbuff=-1
+end
+
+function attack(atk,def)
+
+  local dx,dy=(atk.x-def.x),(atk.y-def.y)
+  set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
+  actor_dir(atk,-dx,-dy)
+  atk.bktrk=#atk.tail
+end
+
+-- bin open/close 
+function binoc(b)
+  if b.open then
+    set_actor_tween(b,b.cx,b.cy,0.2,1)
+  else
+    set_actor_tween(b,b.cx,b.cy-b.h+2,0.2,1)
+  end
+  b.open = not b.open
+end
+
+function can_move(p,di,dj)
+  local newi = p:i()+di
+  local newj = p:j()+dj
+  -- Is tile a "wall"?
+  local test = not is_tile(0,newi,newj)
+  -- Are we trying to move out
+  -- of bound?
+  test = test and (newi >= 0 and newi < m.w)
+  test = test and (newj >= 0 and newj < m.h)
+  -- Do we have movement left?
+  -- Only relevant for combat
+  test = test and (p.mvmt - #p.tail) > 0
+  -- ISSUE
+  -- We can still back track after attacking
+  -- Edge case, need to check if
+  -- backtracking our path
+  if not test then
+    for p in all(p.tail) do
+      test = p[1] == newi
+      test = test and (p[2] == newj)
+      if (test) break
+    end
+  end
+  return test
+end
+
+function track_tail(p,di,dj)
+  local newi,newj=p:i()+di,p:j()+dj
+  local nw_tail = {}
+  for q in all(p.tail) do
+    if newi==q[1] and
+       newj==q[2] and
+       p.bktrk == 0 then
+      break
+    end
+    add(nw_tail,q)
+  end
+
+  if #nw_tail >= #p.tail then
+    add(nw_tail, {p:i(), p:j()})
+  end
+  p.tail = nw_tail
+end
 
 function pc_path(pc)  
  if #pc.tail == 0 then
@@ -518,69 +563,6 @@ function pc_path(pc)
   local y0 = pc.tail[n][2]*8
   rect(x0,y0,x0+7,y0+7,8)
  end
-end
-
-function end_turn_pc(pc)
- pc.tail = {}
- pc.bktrk = 0
-end
-
-function cmbt_menu(pc, s, cmbt_state)
-  local scrn_sz = 128;
-  rect(0, 86, scrn_sz-1, scrn_sz-1, 6)
-  rectfill(1, 87, 126, 126, 0)
-
-  local line_start = 90;
-  local line_delta = 10;
-
-  print(pc.name, 10, 80, 6)
-
-  local cmds = {"move ("..5*(pc.mvmt-#pc.tail).."/"..5*pc.mvmt..")", "melee attack",
-    "ranged attack", "end turn"}
-  for i=1,4 do
-    print(cmds[i], 10, line_start+(i-1)*line_delta, 6)
-  end
-
-  if (cmbt_state != cmbt_states.menu) then
-    rectfill(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
-  else
-    rect(3, line_start+line_delta*s, 7, line_start+s*line_delta+4, 6)
-  end
-end
-
-
-function old_cmbt_upd()
-  for e in all(actors) do
-    if e.type=='pc' then
-      -- Menu select state
-        if cmbt_state == cmbt_states.menu then
-          if (btnp(⬆️)) s = (s - 1) % 4 -- 4 is the number of commands we cycle though
-          if (btnp(⬇️)) s = (s + 1) % 4
-          if (btnp(❎)) cmbt_state = s + 2
-        -- Movement State
-        elseif cmbt_state == cmbt_states.move then
-          if (btnp(⬅️)) e:move(-1, 0)
-          if (btnp(➡️)) e:move( 1, 0)
-          if (btnp(⬆️)) e:move( 0,-1)
-          if (btnp(⬇️)) e:move( 0, 1)
-          if (btnp(❎)) cmbt_state = cmbt_states.menu
-        -- TODO: Attack states. Items?
-        elseif cmbt_state == cmbt_states.mattack or cmbt_state == cmbt_states.rattack then
-          -- Prevent backtracking if we've
-          -- already moved
-          if #e.tail > 0 then
-            e.bktrk = #e.tail
-          end
-          if (btnp(❎)) cmbt_state = cmbt_states.menu
-        elseif cmbt_state == cmbt_states.end_turn then
-          end_turn(e)
-          cmbt_state = cmbt_states.menu
-          s = 0
-        else
-          -- if (btnp(4)) cmbt_state = cmbt_states.menu
-        end
-      end
-  end
 end
 
 -- rolling initiative
@@ -661,37 +643,46 @@ function getbutt()
     end
   end
   return -1
-  -- return 0
 end
 
-function lerp(a,b,t)
-  return a*(1-t) + b*t
+-- Ref
+-- https://www.lexaloffle.com/bbs/?tid=2464
+function linear(t,b,c,d)
+  return c*t/d+b
 end
 
 function in_range(x0,y0,x1,y1,r)
   return (abs(x0-x1)<=r) and (abs(y0-y1)<=r)
 end
   
-function find_enemies(r)
+-- find all actors of type t 
+-- within range r of character p
+function find_actors(p,r,t)
   r = r or 1
-  for c in all(chars) do
-    if c.type=='en' then
-      if (in_range(pc.i,pc.j,c.i,c.j,r)) add(ens,c)
+  local c = {}
+  for a in all(actors) do
+    if a.type==t then
+      if (in_range(p:i(),p:j(),a:i(),a:j(),r)) add(c,a)
     end
   end
+  return c
 end
 
 function draw_box(x,y,w,h,ic,bc)
   ic = ic or 5
   bc = bc or 0
-  rect(x, y+1,(x+w)-1, y+h-2, bc)
-  rect(x+1,y,(x+w)-2,y+h-1,bc)
-  rectfill(x+1,y+2,(x+w)-2,(y+h)-3,ic)
-  rectfill(x+2,y+1,(x+w)-3,(y+h)-2,ic)
+  if bc>=0 then
+    rect(x, y+1,(x+w)-1, y+h-2, bc)
+    rect(x+1,y,(x+w)-2,y+h-1,bc)
+  end
+  if ic>=0 then
+    rectfill(x+1,y+2,(x+w)-2,(y+h)-3,ic)
+    rectfill(x+2,y+1,(x+w)-3,(y+h)-2,ic)
+  end
 end
 
 function text_box(s,x,y,w,h,ic,bc)
-  s = s or "TEST"
+  s = s or "test"
   x = x or 32
   y = y or 32
   w = w or 64
@@ -699,7 +690,7 @@ function text_box(s,x,y,w,h,ic,bc)
   ic = ic or 5
   bc = bc or 0
   draw_box(x,y,w,h,ic,bc)
-  fit_string(s,x+3,y+h\2-6,w)
+  fit_string(s,x+2,y+2,w-2)
 end
 
 function ants_box(x,y,w,h,c,an)
@@ -719,15 +710,15 @@ end
 function fit_string(s,x,y,w,d)
   d = d or " "
   local strs = split(s,d,false)
-  local cw = 0
+  local curr_width = 0
   local line = 0
   for str in all(strs) do
-    if (cw+4*#str > w) then
+    if (curr_width+4*#str >= w) then
       line+=1
-      cw = 0
+      curr_width = 0
     end
-    ?str,x+cw,y+6*line,0
-    cw+=5*#str
+    ?str,x+curr_width,y+6*line,0
+    curr_width+=5*#str
   end
 end
 
@@ -743,15 +734,6 @@ function order_initiative(a)
       j = j - 1
     end
   end
-end
-
--- print string s to approx. 
--- center of screen with y
--- height and color c
-function pcenter(s,y,c)
-  y = y or 64
-  c = c or 7
-  ?s,64-4*(#s\2),y,c
 end
 
 --[[ 
@@ -788,10 +770,10 @@ function interact(e1,e2,i,j)
     e1.hp-=5
     return true
   end
-
   return false
 end
 
+-- constants
 dirx={-1,1,0,0}
 diry={0,0,-1,1}
 
@@ -892,27 +874,27 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000007000000000000000000000000000000000000000000000000000000000000000000000000000000000000af000000006600000666820000e8
-0000000000000777000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff000000066600000046e8200e82
-0000000000077707000000000000000000000000000000000000000000000000000000000000000000000000000000000033300000006660000004060e82e820
-00000000077700070000000000000000000000000000000000000000000000000000000000000000000000000000000003033330000666000000400000e88200
-00000000770000070000000000000000000000000000000000000000000000000000000000000000000000000000000000033000555560000004000000e88200
-0000007770000007000000000000000000000000000000000000000000000000000000000000000000000000000000000040040001550000a9a000000e82e820
-000077700000000700000000000000000000000000000000000000000000000000000000000000000000000000000000040004000115000009900000e8200e82
-000770000000000700000000000000000000000000000000000000000000000000000000000000000000000000000000000004005005000040a00000820000e8
-00777777777777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0077000000000077000000000000000000000000000000000000000000000000000000000000000000000000000060000000b0000000b0000000000000000000
-0077000000000070000000000000000000000000000000000000000000000000000000000000000000000000000066000000bb000000bb000000000000000000
-0077000000000770000000000000000000000000000000000000000000000000000000000000000000000000006606600099bbb00009bbb00000000000000000
-00777000000007000000000000000000000000000000000000000000000000000000000000000000000000000060600000999000000990000000000000000000
-00707000000077000000000000000000000000000000000000000000000000000000000000000000000000000600600009994000000000000000000000000000
-00707000000770000000000000000000000000000000000000000000000000000000000000000000000000000606000009940000000000000000000000000000
-00707000000700000000000000000000000000000000000000000000000000000000000000000000000000006660000099400000000000000000000000000000
+0000000000000007000000000000000000000000000000000000000000000000000000000000000000000000000065000000af000000006600444440820000e8
+0000000000000777000000000000000000000000000000000000000000000000000000000000000000000000000055000000ff000000066600044400e8200e82
+0000000000077707000000000000000000000000000000000000000000000000000000000000000000000000006660000033300000006660000999900e82e820
+00000000077700070000000000000000000000000000000000000000000000000000000000000000000000000606666003033330000666000444444900e88200
+00000000770000070000000000000000000000000000000000000000000000000000000000000000000000000006600000033000555560004444444900e88200
+0000007770000007000000000000000000000000000000000000000000000000000000000000000000000000005005000040040001550000444444440e82e820
+000077700000000700000000000000000000000000000000000000000000000000000000000000000000000005000500040004000115000044444444e8200e82
+000770000000000700000000000000000000000000000000000000000000000000000000000000000000000000000500000004005005000004444440820000e8
+00777777777777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006660000000000000000
+0077000000000077000000000000000000000000000000000000000000000000000000000000000000000000000060000000b000000000460000000000000000
+0077000000000070000000000000000000000000000000000000000000000000000000000000000000000000000066000000bb00000004060000000000000000
+0077000000000770000000000000000000000000000000000000000000000000000000000000000000000000006606600099bbb0000040000000000000000000
+00777000000007000000000000000000000000000000000000000000000000000000000000000000000000000060600000999000000400000000000000000000
+00707000000077000000000000000000000000000000000000000000000000000000000000000000000000000600600009994000a9a000000000000000000000
+00707000000770000000000000000000000000000000000000000000000000000000000000000000000000000606000009940000099000000000000000000000
+0070700000070000000000000000000000000000000000000000000000000000000000000000000000000000666000009940000040a000000000000000000000
 007077000077000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000c0000c000c000000000
-0070070000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000c00cec0cec00cec0cec00c000c0
-007007000770000000000000000000000000000000000000000000000000000000000000000000000000000000000000cec0cec0cec0cec00cec0cec0cec0cec
-007007700700000000000000000000000000000000000000000000000000000000000000000000000000000000000000cec0cec0ccccccc00ccccccc0cec0cec
-007000707700000000000000000000000000000000000000000000000000000000000000000000000000000000000000ccccccc0c1ccc1c00c1ccc1c0ccccccc
+00700700007000000000000000000000000000000000000000000000000000000000000000000000000000000000b0000c000c00cec0cec00cec0cec00c000c0
+00700700077000000000000000000000000000000000000000000000000000000000000000000000000000000000bb00cec0cec0cec0cec00cec0cec0cec0cec
+00700770070000000000000000000000000000000000000000000000000000000000000000000000000000000009bbb0cec0cec0ccccccc00ccccccc0cec0cec
+007000707700000000000000000000000000000000000000000000000000000000000000000000000000000000099000ccccccc0c1ccc1c00c1ccc1c0ccccccc
 007000707000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c1ccc1c0ccccccc00ccccccc0c1ccc1c
 007000777000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ccccccc00ccecc0000ccecc00ccccccc
 0077777777777777000000000000000000000000000000000000000000000000000000000000000000000000000000000ccecc00000000000000000000ccecc0
