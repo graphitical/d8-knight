@@ -359,8 +359,6 @@ function cmbt_ini()
   enp=nil
 
 -- initiative order
-  if (debug) pc.ini=69
-  -- order by initiative
   order_initiative(chars)
   pturn = 1
   pcurr = chars[pturn]
@@ -368,7 +366,7 @@ end
 
 function cmbt_upd()
   wtext.str="what will "..pcurr.name.." do?"
-  wmvtxt.str=5*(pcurr.mvmt-#pcurr.tail)
+  wmvtxt.str=5*(pcurr.mvmt-#pcurr.tail-pcurr.bktrk)
 
   -- get button input
   if(buttbuff<0) buttbuff=getbutt()
@@ -392,11 +390,11 @@ function cmbt_upd()
     elseif wsel.s==1 then
       ens = find_actors(pcurr,1,'en')
       enp = 0
-      g.upd = cmbt_attk_upd
+      g.upd = cmbt_atk_upd
     end
   end
 
-  -- TODO: move to own cmbt_attk_upd function
+  -- TODO: move to own cmbt_atk_upd function
   -- scroll through attack opts
   -- if selwin.s==1 then
   --   -- 2 => +1 shift
@@ -418,7 +416,7 @@ function cmbt_drw()
   end
 
   -- marching ants for attack select
-  if g.upd==cmbt_attk_upd then
+  if g.upd==cmbt_atk_upd then
     for i,e in ipairs(ens) do
         ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
     end
@@ -446,7 +444,7 @@ end
 function cmbt_move_upd()
   local p = pcurr
   wtext.str=p.name.." is on the move!"
-  wmvtxt.str=5*(p.mvmt-#p.tail)
+  wmvtxt.str=5*(p.mvmt-#p.tail-p.bktrk)
   if (buttbuff<0) buttbuff=getbutt()
 
   -- listen for arrow keys to move
@@ -477,7 +475,7 @@ function cmbt_move_upd()
 end
 
 -- loops while we are handling combat attack
-function cmbt_attk_upd()
+function cmbt_atk_upd()
   local p = pcurr
 
   if (buttbuff<0) buttbuff=getbutt()
@@ -525,6 +523,8 @@ function attack(atk,def)
   local dx,dy=(atk.x-def.x),(atk.y-def.y)
   set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
   actor_dir(atk,-dx,-dy)
+  atk.bktrk+=#atk.tail
+  atk.tail={}
 
   make_float("-"..dmg,def.x,def.y,8)
 end
@@ -544,21 +544,20 @@ function can_move(p,di,dj)
   local newj = p:j()+dj
   -- Is tile a "wall"?
   local test = not is_tile(0,newi,newj)
-  -- Are we trying to move out
-  -- of bound?
+  -- Out of bounds?
   test = test and (newi >= 0 and newi < m.w)
   test = test and (newj >= 0 and newj < m.h)
   -- Do we have movement left?
   -- Only relevant for combat
-  test = test and (p.mvmt - #p.tail) > 0
+  test = test and (p.mvmt - #p.tail - p.bktrk) > 0
   -- ISSUE
   -- We can still back track after attacking
   -- Edge case, need to check if
   -- backtracking our path
   if not test then
-    for p in all(p.tail) do
-      test = p[1] == newi
-      test = test and (p[2] == newj)
+    for q in all(p.tail) do
+      test = q[1] == newi
+      test = test and (q[2] == newj)
       if (test) break
     end
   end
@@ -570,8 +569,7 @@ function track_tail(p,di,dj)
   local nw_tail = {}
   for q in all(p.tail) do
     if newi==q[1] and
-       newj==q[2] and
-       p.bktrk == 0 then
+       newj==q[2] then
       break
     end
     add(nw_tail,q)
@@ -587,7 +585,7 @@ function pc_path(pc)
  if #pc.tail == 0 then
   return
  end
- for n=pc.bktrk+1,#pc.tail do
+ for n=1,#pc.tail do
   local x0 = pc.tail[n][1]*8
   local y0 = pc.tail[n][2]*8
   rect(x0,y0,x0+7,y0+7,8)
