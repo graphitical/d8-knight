@@ -12,6 +12,8 @@ function _init()
   chars = {}
   ens = {}
   winds = {}
+  floats={}
+  debugs = {}
 
 -- useful parameters 
   T = 0
@@ -19,7 +21,7 @@ function _init()
   dt = 0
   buttbuff=-1
   debug = true
-  debug = false
+  -- debug = false
   fps = 30
 
 -- making roster
@@ -42,6 +44,7 @@ function _update()
   -- m:up()
   foreach(actors, move_actor)
   foreach(winds, move_actor)
+  foreach(floats, move_float)
   g.upd()
 end
 
@@ -51,6 +54,16 @@ function _draw()
   foreach(actors, draw_actor)
   foreach(winds, draw_wind)
   g.drw()
+  for f in all(floats) do
+    oprint8(f.txt,f.x,f.y,f.c,0)
+  end
+
+  print_char(chars[1],7)
+  -- if debug then
+  --   for d in all(debugs) do
+  --     ?d
+  --   end
+  -- end
 end
 
 -- make an actor
@@ -125,6 +138,19 @@ function move_actor(_a)
   end
 end
 
+function make_float(_t,_x,_y,_c,_dur)
+  _dur = _dur or 1 -- seconds
+  add(floats,{txt=_t,x=_x,y=_y,ty=_y-10,t=0,dur=_dur,c=_c})
+end
+
+function move_float(f)
+  f.t+=1
+  if f.t > f.dur*fps then
+    del(floats,f)
+  end
+  f.y+=(f.ty-f.y)/10
+end
+
 function make_pc()
   a = make_actor(34,7*8,7*8)
   a.name="the knight"
@@ -132,8 +158,9 @@ function make_pc()
   a.frames=2
   a.mvmt=6
   a.ini=23
-  a.maxhp=40
-  a.hp=a.maxhp
+  a.hpmax=40
+  a.hp=a.hpmax
+  a.dmg=5
   a.tail={}
   a.bktrk=0
   a.type='pc'
@@ -493,11 +520,13 @@ function cmbt_attk_upd()
 end
 
 function attack(atk,def)
+  local dmg = atk.dmg
 
   local dx,dy=(atk.x-def.x),(atk.y-def.y)
   set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
   actor_dir(atk,-dx,-dy)
-  atk.bktrk=#atk.tail
+
+  make_float("-"..dmg,def.x,def.y,8)
 end
 
 -- bin open/close 
@@ -636,6 +665,15 @@ end
 
 -->8
 --tools
+function print_char(c,col)
+  col = col or 0
+  ?c.name,0,0,col
+  ?"hp:"..c.hp
+  ?"mvmt:"..c.mvmt
+  ?"bktrk:"..c.bktrk
+  ?"#tail:"..#c.tail
+end
+
 function getbutt()
   for i=0,5 do
     if (btnp(i)) then
