@@ -167,6 +167,7 @@ function make_pc()
   a.opts={204, 205, 206, 207}
   a.attack=0
   a.attacks={205, 221,220,235}
+  a.num_attacks = 2
   return a
 end
 
@@ -221,7 +222,7 @@ function make_en()
   local s = 16
   local a = make_actor(30,flr(rnd(s))*8,flr(rnd(s))*8)
   a.name='enemy'
-  a.maxhp=80
+  a.maxhp=20
   a.hp=a.maxhp
   a.ct=10 -- transparent color
   a.type='en'
@@ -388,9 +389,13 @@ function cmbt_upd()
       binoc(bsel)
       g.upd = cmbt_move_upd
     elseif wsel.s==1 then
-      ens = find_actors_in_range(pcurr,1,'en')
-      enp = 0
-      g.upd = cmbt_atk_upd
+      if pcurr.num_attacks>0 then
+        ens = find_actors_in_range(pcurr,1,'en')
+        enp = 0
+        g.upd = cmbt_atk_upd
+      else
+        wtext.str="no more attacks!"
+      end
     end
   end
 
@@ -527,6 +532,11 @@ function attack(atk,def)
   atk.tail={}
 
   make_float("-"..dmg,def.x,def.y,8)
+  def.hp-=dmg
+  if def.hp<=0 then
+    del(actors,def)
+  end
+  atk.num_attacks-=1
 end
 
 -- bin open/close 
