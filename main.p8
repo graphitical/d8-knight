@@ -60,9 +60,10 @@ function _draw()
 
   print_char(chars[1],7)
   -- if debug then
-  --   for d in all(debugs) do
-  --     ?d
-  --   end
+  for d in all(debugs) do
+    ?d
+  end
+  debugs = {}
   -- end
 end
 
@@ -231,14 +232,14 @@ end
 
 -- windows
 function make_wind(x,y,w,h,ic,bc)
-  _w = make_actor(nil,x,y)
+  local _w = make_actor(nil,x,y)
   del(actors,_w)-- hacky way to keep window from showin up in actors list
   -- anim params
   _w.x,_w.y,_w.tx,_w.ty=x,y,x,y
   _w.ox,_w.oy,_w.dx,_w.dy=0,0,0,0
   _w.cx,_w.cy=x,y
   _w.t,_w.tdur = 0,0
-  -- dra_wg params
+  -- drawing params
   _w.w,_w.h=w,h
   _w.ic,_w.bc=ic,bc
   
@@ -675,6 +676,15 @@ end
 
 -->8
 --tools
+function grayscale(p)
+  -- 3 palettes
+  -- 0: draw palette
+  -- 1: display palette
+  -- 2: secondary palette
+  p = p or 0
+  pal({1,1,5,5,5,6,7,13,6,7,7,6,13,6,7,1}, p)
+end
+
 function get_actor(_i,_j)
   for a in all(actors) do
     if a:i()==_i and a:j()==_j then
@@ -738,16 +748,20 @@ function draw_box(x,y,w,h,ic,bc)
   end
 end
 
-function text_box(s,x,y,w,h,ic,bc)
-  s = s or "test"
-  x = x or 32
-  y = y or 32
-  w = w or 64
-  h = h or 64
-  ic = ic or 5
-  bc = bc or 0
+function text_box(s,x,y,w,h,ic,bc,tc)
+  s = s or "test" -- string
+  w = w or 64  -- box width
+  local lines = fit_string(s,w-4)
+  h = h or 6*#lines -- box height
+  x = x or 32  -- x position
+  y = y or 32  -- y position
+  ic = ic or 5 -- fill color
+  bc = bc or 0 -- border color
+  tc = tc or 0 -- text color
   draw_box(x,y,w,h,ic,bc)
-  fit_string(s,x+2,y+2,w-2)
+  for i,line in ipairs(lines) do
+    ?line,x+2,y+2+6*(i-1),tc
+  end
 end
 
 function ants_box(x,y,w,h,c,an)
@@ -761,22 +775,27 @@ function ants_box(x,y,w,h,c,an)
   fillp()
 end
 
--- Fits a string s into a
--- width w at position (x,y)
--- split by delim. d
-function fit_string(s,x,y,w,d)
-  d = d or " "
-  local strs = split(s,d,false)
-  local curr_width = 0
-  local line = 0
+-- fits a string into a width
+-- creating new lines to ensure
+-- it doesn't overflow the width
+-- s: input string
+-- w: max width
+-- d: string splitting delimiter
+function fit_string(_s,_w,_d)
+  _d = _d or " "
+  local strs = split(_s,_d,false)
+  local builder = ""
+  local lines = {}
+
   for str in all(strs) do
-    if (curr_width+4*#str >= w) then
-      line+=1
-      curr_width = 0
+    if 4*(#builder+#str) > _w then
+      add(lines,builder)
+      builder = ""
     end
-    ?str,x+curr_width,y+6*line,0
-    curr_width+=5*#str
+    builder..=str.." "
   end
+  add(lines,builder)
+  return lines
 end
 
 function rollad(num)
