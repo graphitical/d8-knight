@@ -43,7 +43,7 @@ function _update()
   T+=1
   -- m:up()
   foreach(actors, move_actor)
-  foreach(winds, move_actor)
+  foreach(winds, update_wind)
   foreach(floats, move_float)
   g.upd()
 end
@@ -67,11 +67,11 @@ function _draw()
   -- end
 end
 
--- make an actor
+-- make an actor with sprite _sp
 -- add it to global collection
 -- x,y are pixel coordinates of
 -- actor
-function make_actor(_sp,_x,_y)
+function make_actor(_sp,_x,_y,_b)
   a = {}
   a.sp=_sp or nil
   a.spo=0 -- sprite offset
@@ -93,6 +93,13 @@ function make_actor(_sp,_x,_y)
   return a
 end
 
+-- draw actor to screen. if a 
+-- transparent color _a.ct is set that
+-- is not black then will change
+-- that color
+-- TODO: come remove the local variables
+-- here I don't think its saving me
+-- any tokens
 function draw_actor(_a)
   local sp,spo,f = _a.sp,_a.spo,_a.frame
   local x,y    = _a.x,_a.y
@@ -104,6 +111,12 @@ function draw_actor(_a)
   pal()
 end
 
+-- sets an actors "tween" to go 
+-- from current location to 
+-- (_x,_y) in duration _d seconds
+-- _type sets if it is a full
+-- motion or a bump that returns
+-- to its start position
 function set_actor_tween(_a,_x,_y,_d,_type)
   if (_a.anim!=0) return
 
@@ -114,6 +127,12 @@ function set_actor_tween(_a,_x,_y,_d,_type)
   _a.anim = _type
 end
 
+-- fulfills the direction made
+-- by set_actor_tween. does the
+-- actual updating. can use 
+-- different easing functions by
+-- setting that in the actor 
+-- directly
 function move_actor(_a)
   if (flr(_a.tdur) <= 0) return
 
@@ -139,11 +158,18 @@ function move_actor(_a)
   end
 end
 
+-- makes a floating text object
+-- at location (x,y) with color 
+-- c for dur seconds
 function make_float(_t,_x,_y,_c,_dur)
   _dur = _dur or 1 -- seconds
   add(floats,{txt=_t,x=_x,y=_y,ty=_y-10,t=0,dur=_dur,c=_c})
 end
 
+-- animates the float up using a
+-- simple exponential lerp
+-- will delete float when no
+-- longer needed
 function move_float(f)
   f.t+=1
   if f.t > f.dur*fps then
@@ -231,6 +257,9 @@ function make_en()
 end
 
 -- windows
+-- makes window object held in winds
+-- is a child objet of actor so
+-- can use actor based functions
 function make_wind(x,y,w,h,ic,bc)
   local _w = make_actor(nil,x,y)
   del(actors,_w)-- hacky way to keep window from showin up in actors list
@@ -242,21 +271,51 @@ function make_wind(x,y,w,h,ic,bc)
   -- drawing params
   _w.w,_w.h=w,h
   _w.ic,_w.bc=ic,bc
+  _w.str,_w.strold= "",""
+  _w.strdur,_w.strtime = 0,0
   
   add(winds,_w)
   return _w
 end
 
-function draw_wind(_w)
-  local str   = _w.str
-  local sx,sy = _w.x,_w.y
-  local w,h   = _w.w,_w.h
-  local ic,bc = _w.ic,_w.bc
-  text_box(str,sx,sy,w,h,ic,bc)
+-- updates window _w by moving
+-- it and then checking if the
+-- string should be reverted to
+-- an older string
+function update_wind(_w)
+  move_actor(_w)
+
+  if (_w.strdur <= 0) return
+  -- Change back to old string
+  _w.strtime+=1
+  if _w.strtime > _w.strdur then
+    _w.str,_w.strold = _w.strold, ""
+    _w.strtime, _w.strdur = 0,0
+  end
+
 end
 
+-- draws a window _w based on 
+-- its parameters
+function draw_wind(_w)
+  text_box(_w.str,_w.x,_w.y,_w.w,_w.h,_w.ic,_w.bc)
+end
 
+-- sets the string of window _w
+-- to _s. optional duration _d
+-- will set a new string _s, but
+-- revert to old string after _d
+-- seconds
+function set_wind_msg(_w,_s,_d)
+  if _d then
+    _w.str,_w.strold = _s,_w.str
+    _w.strtime,_w.strdur = 0, flr(_d*fps)
+  end
 
+  if _w.strdur <=0 then 
+    _w.str = _s
+  end
+end
 -->8
 -- main menu
 
@@ -350,11 +409,9 @@ function cmbt_ini()
   bins['wmvtxt']=wmvtxt
   -- action menu bgnd
   wbgnd=make_wind(x,y,w,h,7,0)
-  wbgnd.str=""
   -- action menu selection wind
   wsel=make_wind(x+2,y+2,h-4,h-4,7,9)
   wsel.s=0
-  wsel.str=""
   
 -- enemy selection
   ens={}
@@ -367,8 +424,7 @@ function cmbt_ini()
 end
 
 function cmbt_upd()
-  wtext.str="what will "..pcurr.name.." do?"
-  wmvtxt.str=5*(pcurr.mvmt-#pcurr.tail-pcurr.bktrk)
+  set_wind_msg(wtext,"what will "..pcurr.name.." do?")
 
   -- get button input
   if(buttbuff<0) buttbuff=getbutt()
@@ -385,18 +441,30 @@ function cmbt_upd()
 
   -- enter selected modes
   if buttbuff==5 then
+    -- movement
     if wsel.s==0 then
       bsel = bins['wmvtxt']
       binoc(bsel)
       g.upd = cmbt_move_upd
+    -- attacks
     elseif wsel.s==1 then
       if pcurr.num_attacks>0 then
         ens = find_actors_in_range(pcurr,1,'en')
-        enp = 0
-        g.upd = cmbt_atk_upd
+        if #ens>0 then
+          g.upd = cmbt_atk_upd
+          enp = 0
+        else
+          set_wind_msg(wtext,'no enemies within range!',1.5)
+          enp = nil
+        end
       else
-        wtext.str="no more attacks!"
+        set_wind_msg(wtext,"no more attacks!",1.5)
       end
+    -- inventory
+    elseif wsel.s==2 then
+
+    -- end turn
+    elseif wsel.s==3 then
     end
   end
 
@@ -409,11 +477,15 @@ function cmbt_upd()
   -- end
 
   buttbuff=-1
-
 end
 
 function cmbt_drw()
+  -- draw current movement path
   pc_path(pcurr)
+  -- redraw current player so 
+  -- they appear on top of 
+  -- movement path
+  draw_actor(pcurr)
 
   -- ??? maybe should be part of window?
   -- sprites for actions
@@ -422,6 +494,8 @@ function cmbt_drw()
   end
 
   -- marching ants for attack select
+  -- only care about if we're in
+  -- attack mode
   if g.upd==cmbt_atk_upd then
     for i,e in ipairs(ens) do
         ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
@@ -429,29 +503,16 @@ function cmbt_drw()
   end
 end
 
--- set the correct sprite for 
--- actor a, based on direction
--- di and dj. assumes particualar
--- sprite order of 2 frame motion
--- with right, up, down
-function actor_dir(_a,_di,_dj)
-    if _dj > 0 then
-      _a.spo = 2
-    elseif _dj < 0 then
-      _a.spo = 4
-    else
-      _a.spo = 0
-    end
-    _a.flip = _di < 0
-end
-
 -- loops while we are running through
 -- combat motion
 function cmbt_move_upd()
   local p = pcurr
-  wtext.str=p.name.." is on the move!"
-  wmvtxt.str=5*(p.mvmt-#p.tail-p.bktrk)
+
+  set_wind_msg(wtext,pcurr.name.." is on the move!")
+  set_wind_msg(wmvtxt,5*(pcurr.mvmt-#pcurr.tail-pcurr.bktrk))
+
   if (buttbuff<0) buttbuff=getbutt()
+  if (buttbuff<0) return
 
   -- listen for arrow keys to move
   if buttbuff>=0 and buttbuff<4 then
@@ -484,31 +545,16 @@ end
 function cmbt_atk_upd()
   local p = pcurr
 
+  set_wind_msg(wtext,"❎confirm 🅾️cancel")
+
   if (buttbuff<0) buttbuff=getbutt()
-  
-  if enp!=nil then
-    if #ens==0 then
-      wtext.str="no enemies within range"
-      enp=nil
-      timer = 0
-    else
-      wtext.str="❎confirm 🅾️cancel"
-      -- cycle through enemies
-      -- within range
-      if buttbuff==2 or buttbuff==3 then
-        enp+=diry[buttbuff+1]
-        enp=enp%#ens
-      end
-    end
-  else
-    -- if no enemies then wait 30
-    -- frames before releasing 
-    -- to player so they have
-    -- time to read msg
-    if timer>30 then
-      g.upd=cmbt_upd
-    end
-    timer+=1
+  if (buttbuff<0) return
+
+  -- cycle through enemies
+  -- within range
+  if buttbuff==2 or buttbuff==3 then
+    enp+=diry[buttbuff+1]
+    enp=enp%#ens
   end
 
   if buttbuff==4 then
@@ -523,24 +569,36 @@ function cmbt_atk_upd()
   buttbuff=-1
 end
 
+-- performs attack from actor atk
+-- to actor def 
 function attack(atk,def)
   local dmg = atk.dmg
 
   local dx,dy=(atk.x-def.x),(atk.y-def.y)
   set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
   actor_dir(atk,-dx,-dy)
+
+  -- prevent backtracking after attack
   atk.bktrk+=#atk.tail
   atk.tail={}
 
+  -- show damage dealt
   make_float("-"..dmg,def.x,def.y,8)
   def.hp-=dmg
+  -- remove defending actor from list
+  -- if defeated
+  -- TODO: probably move this part
+  -- outside of attack and into an
+  -- update function
   if def.hp<=0 then
     del(actors,def)
   end
   atk.num_attacks-=1
 end
 
--- bin open/close 
+-- opens/closes a bin
+-- bin is a type of window that we
+-- animate
 function binoc(b)
   if b.open then
     set_actor_tween(b,b.cx,b.cy,0.2,1)
@@ -550,6 +608,18 @@ function binoc(b)
   b.open = not b.open
 end
 
+-- big funciton to check if the
+-- tile the actor p is open
+-- check for:
+-- 1. not a wall
+-- 2. within map bounds
+-- 3. if there is movement left
+-- 3a. edge case when 0 movement,
+--     but we are backtacking
+-- 4. if other actors are in the
+--    way
+-- TODO: this can probably be 
+-- refactored
 function can_move(p,di,dj)
   local newi = p:i()+di
   local newj = p:j()+dj
@@ -577,6 +647,11 @@ function can_move(p,di,dj)
   return test
 end
 
+-- tracks/builds list of tail that
+-- pc has already traveled. gets
+-- zeroed out after an attack
+-- rebuilds tail every call which
+-- lets us account for backtracking
 function track_tail(p,di,dj)
   local newi,newj=p:i()+di,p:j()+dj
   local nw_tail = {}
@@ -594,6 +669,7 @@ function track_tail(p,di,dj)
   p.tail = nw_tail
 end
 
+-- draws tail for current movement
 function pc_path(pc)  
  if #pc.tail == 0 then
   return
@@ -676,6 +752,25 @@ end
 
 -->8
 --tools
+
+-- set the correct sprite for 
+-- actor a, based on direction
+-- di and dj. assumes particualar
+-- sprite order of 2 frame motion
+-- with right, up, down
+function actor_dir(_a,_di,_dj)
+    if _dj > 0 then
+      _a.spo = 2
+    elseif _dj < 0 then
+      _a.spo = 4
+    else
+      _a.spo = 0
+    end
+    _a.flip = _di < 0
+end
+-- sets the palette to gray scale
+-- useful for objects we want to
+-- indicate are not selectable
 function grayscale(p)
   -- 3 palettes
   -- 0: draw palette
@@ -685,6 +780,9 @@ function grayscale(p)
   pal({1,1,5,5,5,6,7,13,6,7,7,6,13,6,7,1}, p)
 end
 
+-- checks to see if there is an
+-- actor at map tile location
+-- (i,j)
 function get_actor(_i,_j)
   for a in all(actors) do
     if a:i()==_i and a:j()==_j then
@@ -694,6 +792,7 @@ function get_actor(_i,_j)
   return nil
 end
 
+-- debugging tool
 function print_char(c,col)
   col = col or 0
   ?c.name,0,0,col
@@ -703,6 +802,9 @@ function print_char(c,col)
   ?"#tail:"..#c.tail
 end
 
+-- quick loop to return any btnp
+-- or importantly let us know 
+-- that nothing was pressed
 function getbutt()
   for i=0,5 do
     if (btnp(i)) then
@@ -718,6 +820,10 @@ function linear(t,b,c,d)
   return c*t/d+b
 end
 
+-- used to see if an attack can 
+-- land. dnd rules say a square 
+-- is 5 feet so we don't worry
+-- about euclidean norm
 function in_range(x0,y0,x1,y1,r)
   return (abs(x0-x1)<=r) and (abs(y0-y1)<=r)
 end
@@ -735,6 +841,8 @@ function find_actors_in_range(p,r,t)
   return c
 end
 
+-- draws my fancy box with fancy
+-- corners
 function draw_box(x,y,w,h,ic,bc)
   ic = ic or 5
   bc = bc or 0
@@ -748,6 +856,11 @@ function draw_box(x,y,w,h,ic,bc)
   end
 end
 
+-- draws a box and puts text
+-- that *should* autowrap to fit
+-- the desired box size
+-- can overflow the box height
+-- if h is specified
 function text_box(s,x,y,w,h,ic,bc,tc)
   s = s or "test" -- string
   w = w or 64  -- box width
@@ -764,6 +877,11 @@ function text_box(s,x,y,w,h,ic,bc,tc)
   end
 end
 
+-- box of marching ants. good 
+-- for showing a selection among
+-- a bunch of other similar things.
+-- can be animated or not animated
+-- by bool an
 function ants_box(x,y,w,h,c,an)
   c = c or 0x8 -- red
   local bf = 0x936c.936c
@@ -802,6 +920,8 @@ function rollad(num)
   return flr(rnd(num))+1
 end
 
+-- sorts a list of actors by their
+-- initiative. simple insertion sort
 function order_initiative(a)
   for i=1,#a do
     local j = i
@@ -857,7 +977,7 @@ function oprint8(_t,_x,_y,_c,_c2)
   ?_t,_x,_y,_c
 end
 
--- constants
+-- useful constants
 dirx={-1,1,0,0,1,1,-1,-1}
 diry={0,0,-1,1,-1,1,1,-1}
 
