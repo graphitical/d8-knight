@@ -271,8 +271,6 @@ function make_wind(x,y,w,h,ic,bc)
   -- drawing params
   _w.w,_w.h=w,h
   _w.ic,_w.bc=ic,bc
-  _w.str,_w.strold= "",""
-  _w.strdur,_w.strtime = 0,0
   
   add(winds,_w)
   return _w
@@ -285,14 +283,13 @@ end
 function update_wind(_w)
   move_actor(_w)
 
-  if (_w.strdur <= 0) return
-  -- Change back to old string
-  _w.strtime+=1
-  if _w.strtime > _w.strdur then
-    _w.str,_w.strold = _w.strold, ""
-    _w.strtime, _w.strdur = 0,0
+  if _w.strdur!=nil then
+    _w.strdur-=1
+    if _w.strdur<=0 then
+      _w.str,_w.oldstr=_w.oldstr,""
+      _w.strdur=nil
+    end
   end
-
 end
 
 -- draws a window _w based on 
@@ -315,10 +312,10 @@ end
 function set_wind_msg(_w,_s,_d)
   if _d then
     _w.str,_w.strold = _s,_w.str
-    _w.strtime,_w.strdur = 0, flr(_d*fps)
+    _w.strdur = flr(_d*fps)
   end
 
-  if _w.strdur <=0 then 
+  if _w.strdur==nil then
     _w.str = _s
   end
 end
@@ -413,6 +410,7 @@ function cmbt_ini()
   -- text window
   wtext=make_wind(0,y,w,h,6,5)
   -- action bins
+  -- TODO: make_bin() func
   bins={}
   wmvtxt=make_wind(x+2,y,h-4,h-6,7,0)
   wmvtxt.open = false
@@ -885,7 +883,7 @@ end
 -- can overflow the box height
 -- if h is specified
 function text_box(s,x,y,w,h,ic,bc,tc)
-  s = s or "test" -- string
+  s = s or "" -- string
   w = w or 64  -- box width
   local lines = fit_string(s,w-4)
   h = h or 6*#lines -- box height
@@ -895,9 +893,11 @@ function text_box(s,x,y,w,h,ic,bc,tc)
   bc = bc or 0 -- border color
   tc = tc or 0 -- text color
   draw_box(x,y,w,h,ic,bc)
+  clip(x+2,y+2,w-4,h-4)
   for i,line in ipairs(lines) do
     ?line,x+2,y+2+6*(i-1),tc
   end
+  clip()
 end
 
 -- box of marching ants. good 
