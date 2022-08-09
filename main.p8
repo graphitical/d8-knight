@@ -187,14 +187,17 @@ function make_pc()
   a.ini=23
   a.hpmax=40
   a.hp=a.hpmax
-  a.dmg="2d6+4"
   a.tail={}
   a.bktrk=0
   a.type='pc'
-  a.opts={204, 205, 206, 207}
-  a.attack=0
-  a.attacks={205, 221,220,235}
-  a.num_attacks = 2
+  a.atksel = 0 -- zero index for attack type
+  a.atks = {
+    {sp=205, name="great sword", dmg="2d6+3", rng=1},
+    {sp=221, name="longbow", dmg="1d8+2", rng=30}
+  }
+  a.atk= a.atks[1]
+  a.opts={204, a.atk.sp, 206, 207} -- combat options
+  a.num_attacks = 2 -- number of attacks pc can make
   return a
 end
 
@@ -444,6 +447,15 @@ function cmbt_upd()
     wsel.x = wsel.cx+wsel.s*16
   end
 
+  --scroll ud through attack opts
+  if (buttbuff==2 or buttbuff==3) 
+     and wsel.s==1 then
+      pcurr.atksel=(pcurr.atksel+diry[buttbuff+1])%#pcurr.atks
+      pcurr.atk = pcurr.atks[pcurr.atksel+1]
+      pcurr.opts[2] = pcurr.atk.sp
+      set_wind_msg(wtext,pcurr.atk.name..": "..pcurr.atk.dmg,2)
+  end
+
   -- enter selected modes
   if buttbuff==5 then
     -- movement
@@ -454,7 +466,7 @@ function cmbt_upd()
     -- attacks
     elseif wsel.s==1 then
       if pcurr.num_attacks>0 then
-        ens = find_actors_in_range(pcurr,1,'en')
+        ens = find_actors_in_range(pcurr,pcurr.atk.rng,'en')
         if #ens>0 then
           g.upd = cmbt_atk_upd
           enp = 0
@@ -581,7 +593,7 @@ function attack(atk,def)
   atk.tail={}
 
   -- roll for damage
-  local dmg = roll_dmg(atk.dmg)
+  local dmg = roll_dmg(atk.atk.dmg)
   make_float("-"..dmg,def.x,def.y,8)
   def.hp-=dmg
   -- remove defending actor from list
@@ -821,6 +833,9 @@ function print_char(c,col)
   ?"mvmt:"..c.mvmt
   ?"bktrk:"..c.bktrk
   ?"#tail:"..#c.tail
+  ?"atk:"..c.atk.name
+  ?"atkdmg:"..c.atk.dmg
+  ?"atkrng:"..c.atk.rng
 end
 
 -- quick loop to return any btnp
