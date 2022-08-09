@@ -55,7 +55,7 @@ function _draw()
   foreach(winds, draw_wind)
   g.drw()
   for f in all(floats) do
-    oprint8(f.txt,f.x,f.y,f.c,0)
+    oprint(f.txt,f.x,f.y,f.c,0)
   end
 
   print_char(chars[1],7)
@@ -504,6 +504,10 @@ function cmbt_drw()
   -- movement path
   draw_actor(pcurr)
 
+  if g.upd==cmbt_upd then
+    bouncebutt(5,wsel.x-4,wsel.y-6,7,0)
+  end
+
   -- marching ants for attack select
   -- only care about if we're in
   -- attack mode
@@ -764,6 +768,18 @@ end
 -->8
 --tools
 
+function bouncebutt(_b,_x,_y,_c1,_c2)
+  local b = {"\139","\145","\148","\131","\142","\151"}
+  _b = mid(0,_b,5)
+  local bb = b[_b+1]
+
+  if T%30 > 15 then
+    _y+=1
+  end
+  oprint(bb,_x,_y+2,_c1,_c2,8)
+  oprint(bb,_x,_y,_c1,_c2,4)
+end
+
 -- parses an actors dmg string
 -- to generate the damage
 -- e.g. actor dmg is '2d6+4'
@@ -801,6 +817,7 @@ function actor_dir(_a,_di,_dj)
     end
     _a.flip = _di < 0
 end
+
 -- sets the palette to gray scale
 -- useful for objects we want to
 -- indicate are not selectable
@@ -1008,8 +1025,9 @@ function interact(e1,e2,i,j)
 end
 
 -- prints text with outline
-function oprint8(_t,_x,_y,_c,_c2)
-  for i=1,8 do
+function oprint(_t,_x,_y,_c,_c2,_n)
+  _n = _n or 8
+  for i=1,_n do
     ?_t,_x+dirx[i],_y+diry[i],_c2
   end
   ?_t,_x,_y,_c
