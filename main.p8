@@ -298,7 +298,13 @@ end
 -- draws a window _w based on 
 -- its parameters
 function draw_wind(_w)
-  text_box(_w.str,_w.x,_w.y,_w.w,_w.h,_w.ic,_w.bc)
+  local x,y,sps = _w.x,_w.y,_w.sps
+  text_box(_w.str,x,y,_w.w,_w.h,_w.ic,_w.bc)
+  if sps and #sps > 0 then
+    for i,s in ipairs(sps) do
+      spr(s,x+4+(i-1)*16,y+4)
+    end
+  end
 end
 
 -- sets the string of window _w
@@ -397,6 +403,10 @@ function cmbt_ini()
   g.upd = cmbt_upd
   g.drw = cmbt_drw
 
+-- initiative order
+  order_initiative(chars)
+  pturn = 1
+  pcurr = chars[pturn]
 -- combat menu
   local x,y,w,h=64,112,64,16
   winds={} -- clear winds for combat
@@ -409,18 +419,15 @@ function cmbt_ini()
   bins['wmvtxt']=wmvtxt
   -- action menu bgnd
   wbgnd=make_wind(x,y,w,h,7,0)
+  wbgnd.sps = pcurr.opts
   -- action menu selection wind
-  wsel=make_wind(x+2,y+2,h-4,h-4,7,9)
+  wsel=make_wind(x+2,y+2,h-4,h-4,-1,9)
   wsel.s=0
   
 -- enemy selection
   ens={}
   enp=nil
 
--- initiative order
-  order_initiative(chars)
-  pturn = 1
-  pcurr = chars[pturn]
 end
 
 function cmbt_upd()
@@ -486,12 +493,6 @@ function cmbt_drw()
   -- they appear on top of 
   -- movement path
   draw_actor(pcurr)
-
-  -- ??? maybe should be part of window?
-  -- sprites for actions
-  for i,s in ipairs(pcurr.opts) do
-    spr(s,wbgnd.x+4+(i-1)*16,wbgnd.y+4)
-  end
 
   -- marching ants for attack select
   -- only care about if we're in
