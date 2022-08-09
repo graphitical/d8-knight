@@ -187,7 +187,7 @@ function make_pc()
   a.ini=23
   a.hpmax=40
   a.hp=a.hpmax
-  a.dmg=5
+  a.dmg="2d6+4"
   a.tail={}
   a.bktrk=0
   a.type='pc'
@@ -572,8 +572,7 @@ end
 -- performs attack from actor atk
 -- to actor def 
 function attack(atk,def)
-  local dmg = atk.dmg
-
+  -- set animation stuff
   local dx,dy=(atk.x-def.x),(atk.y-def.y)
   set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
   actor_dir(atk,-dx,-dy)
@@ -582,7 +581,8 @@ function attack(atk,def)
   atk.bktrk+=#atk.tail
   atk.tail={}
 
-  -- show damage dealt
+  -- roll for damage
+  local dmg = roll_dmg(atk.dmg)
   make_float("-"..dmg,def.x,def.y,8)
   def.hp-=dmg
   -- remove defending actor from list
@@ -752,6 +752,28 @@ end
 
 -->8
 --tools
+
+-- parses an actors dmg string
+-- to generate the damage
+-- e.g. actor dmg is '2d6+4'
+-- this function will roll 2d6
+-- and add 4 to the result and 
+-- return that value
+function roll_dmg(roll)
+  -- find number before the d
+  local t1 = split(roll,'d')
+  -- find the number after the d
+  -- find the number after the +
+  local t2 = split(t1[2],'+')
+  local dmg = 0
+
+  -- roll 
+  for i=1,t1[1] do
+    dmg+=rollad(t2[1])
+  end
+  dmg+=t2[2]
+  return dmg
+end
 
 -- set the correct sprite for 
 -- actor a, based on direction
