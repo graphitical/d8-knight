@@ -208,6 +208,28 @@ function make_pc()
   return a
 end
 
+function make_en(_sp,_i,_j)
+  local a = make_actor(_sp,_i,_j)
+  a.name='enemy'
+  a.ct=10
+  a.frames=2
+  a.mvmt=4
+  a.ini=16
+  a.hpmax=20
+  a.hp=a.hpmax
+  a.tail={}
+  a.bktrk=0
+  a.type='en'
+  a.atksel = 0 -- zero index for attack type
+  a.atks = {
+    {sp=205, name="great sword", dmg="2d6+3", rng=1}
+  }
+  a.atk= a.atks[1]
+  a.opts={204, a.atk.sp, 206, 207} -- combat options
+  a.num_attacks = 1 -- number of attacks to be made
+  return a
+end
+
 function make_map()
   local m = {}
   m.i = 0
@@ -254,16 +276,6 @@ function make_map()
     end
 
   return m
-end
-
-function make_en(_sp,_i,_j)
-  local a = make_actor(_sp,_i,_j)
-  a.name='enemy'
-  a.maxhp=20
-  a.hp=a.maxhp
-  a.ct=10 -- transparent color
-  a.type='en'
-  return a
 end
 
 -- windows
