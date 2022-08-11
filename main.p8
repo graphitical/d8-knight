@@ -625,14 +625,21 @@ function end_turn(p)
   pturn=pturn%#chars + 1
   pcurr = chars[pturn]
   if pcurr.type == 'en' then
+    path = a_star(pcurr:i(),pcurr:j(),pc:i(),pc:j())
+    set_wind_msg(wtext,"ai turn!")
     g.upd = ai_turn_upd
   end
 end
 
 function ai_turn_upd()
-  set_wind_msg(wtext,"ai turn!")
-  path = a_star(pcurr:i(),pcurr:j(),pc:i(),pc:j())
-
+  local bot = pcurr
+  if #path>0 then 
+    if T%15 == 0 then -- move every half second
+      local step = deli(path)
+      set_actor_tween(bot,8*step[1],8*step[2],0.25,1)
+      actor_dir(bot,step[1]-bot:i(),step[2]-bot:j())
+    end
+  end
 end
 -- performs attack from actor atk
 -- to actor def 
@@ -848,12 +855,26 @@ function a_star(i0,j0,i1,j1,h)
 
     if nodes_eq(current,goal) then
       -- add(debugs,'goal found!')
-      local path = {current}
+      -- Note:
+      -- no need to save the 
+      -- goal position because
+      -- we can only go up to it
+      -- not on top of it
+      local path = {}
       while not nodes_eq(current,start) do
         current = came_from[v2i(current)]
         add(path,current)
       end
-      reverse(path)
+      -- Note:
+      -- no need to reverse the
+      -- order because we pop
+      -- the elements off in
+      -- reverse order for
+      -- animation
+
+      -- pop the end which is 
+      -- the current location
+      deli(path)
       return path
     end
 
