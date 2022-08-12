@@ -179,10 +179,10 @@ end
 
 -- makes a floating text object
 -- at location (x,y) with color 
--- c for dur seconds
-function make_float(_t,_x,_y,_c,_dur)
+-- c that lasts for dur seconds
+function make_float(_txt,_x,_y,_c,_dur)
   _dur = _dur or 1 -- seconds
-  add(floats,{txt=_t,x=_x,y=_y,ty=_y-10,t=0,dur=_dur,c=_c})
+  add(floats,{txt=_txt,x=_x,y=_y,ty=_y-10,t=0,tdur=_dur*fps,c=_c})
 end
 
 -- animates the float up using a
@@ -191,7 +191,7 @@ end
 -- longer needed
 function move_float(f)
   f.t+=1
-  if f.t > f.dur*fps then
+  if f.t > f.tdur then
     del(floats,f)
   end
   f.y+=(f.ty-f.y)/10
@@ -239,7 +239,7 @@ function make_en(_sp,_i,_j)
   }
   a.atk= a.atks[1]
   a.opts={204, a.atk.sp, 206, 207} -- combat options
-  a.num_attacks = 1 -- number of attacks to be made
+  a.num_attacks = 3 -- number of attacks to be made
   a.pals = {{[6]=5},{[7]=1},{[5]=4},{[1]=0},{[13]=2},{[14]=6}}
   return a
 end
@@ -633,14 +633,21 @@ end
 
 function ai_turn_upd()
   local bot = pcurr
-  if #path>0 then 
-    if T%15 == 0 then -- move every half second
-      local step = deli(path)
-      set_actor_tween(bot,8*step[1],8*step[2],0.25,1)
-      actor_dir(bot,step[1]-bot:i(),step[2]-bot:j())
+
+  if T%15 == 0 then -- move every half second
+    if #path>0 then 
+        local step = deli(path)
+        set_actor_tween(bot,8*step[1],8*step[2],0.25,1)
+        actor_dir(bot,step[1]-bot:i(),step[2]-bot:j())
+    else
+      local pcs = find_actors_in_range(bot,1,'pc')
+      if #pcs>0 and bot.num_attacks>0 then
+        attack(bot,pcs[1])
+      end
     end
   end
 end
+
 -- performs attack from actor atk
 -- to actor def 
 function attack(atk,def)
@@ -1104,15 +1111,42 @@ end
   
 -- find all actors of type t 
 -- within range r of character p
+-- sort by closest
 function find_actors_in_range(p,r,t)
   r = r or 1
   local c = {}
+  local dists = {}
   for a in all(actors) do
     if a.type==t then
-      if (in_range(p:i(),p:j(),a:i(),a:j(),r)) add(c,a)
+      local pi,pj,ai,aj = p:i(),p:j(),a:i(),a:j()
+      if in_range(pi,pj,ai,aj,r) then
+        add(c,a)
+        add(dists,dist({pi,pj},{ai,aj}))
+      end
     end
   end
+
+  -- sort c based on dists
+  sort(dists,c)
   return c
+end
+
+-- insertion sort a list in place
+-- will also sort a second list 
+-- using the first as the comparator
+function sort(a,b)
+  assert(#a==#b)
+  for i=1,#a do
+      local j = i
+      while j > 1 and a[j-1] > a[j] do
+          a[j],a[j-1] = a[j-1],a[j]
+          -- if b is not present
+          -- it evaluates to nil
+          -- which is false
+          if (b) b[j],b[j-1] = b[j-1],b[j]
+          j = j - 1
+      end
+  end
 end
 
 -- draws my fancy box with fancy
