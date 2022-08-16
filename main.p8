@@ -11,7 +11,7 @@ function _init()
   actors = {}
   chars = {}
   ens = {}
-  winds = {}
+  windows = {}
   floats={}
   debugs = {}
   path = {}
@@ -26,20 +26,52 @@ function _init()
   fps = 30
 
 -- making roster
-  pc = make_pc()
+  -- the knight
+  knight = actor:new{name='the knight',x=64,y=64}
+  -- pals and palts interfaces 
+  -- are different :'(
+  knight.pals={[14]=5}
+  knight.palts = 0b0000000000100000
+  knight.sp = 34
+  knight.frames = {34,35}
+  knight.frame_sets = {{34,35},{36,37},{38,39}}
+  knight.stats = statblock{hp=40,num_attacks=2,mvmt=6}
+  knight.tail = {}
+  knight.atk = 1 -- currently selected attack in atks
+  knight.atks = {
+    {sp=205, name="great sword", dmg="2d6+3", rng=1},
+    {sp=221, name="longbow", dmg="1d8+2", rng=30}
+  }
+  knight.opts = {204,205,206,207}
+  knight.type='pc'
+  knight.ini = 21
+  add(actors,knight)
+
   m = make_map()
   -- replace enemy tiles with 
   -- actual enemies
   for i=0,15 do
     for j=0,15 do
       if mget(i,j)==30 then
-        make_en(34,i*8,j*8)
         mset(i,j,64)
+        en = actor:new{name='the dark knight',x=i*8,y=j*8}
+        en.pals  = {[6]=5,[7]=1,[5]=4,[1]=0,[13]=2,[14]=6}
+        en.palts = 0b0000000000100000
+        en.sp = 34
+        en.frames = {34,35}
+        en.frame_sets = {{34,35},{36,37},{38,39}}
+        en.type='en'
+        en.ini = 19
+        en.stats = statblock{hp=20,mvmt=6,num_attacks=3}
+        en.tail = {}
+        en.atk = 1
+        en.atks = {{sp=205, name="great sword", dmg="2d6+3", rng=1}}
+        add(actors,en)
       end
     end
   end
 
-  chars = {pc}
+  -- chars = {knight}
 
   -- mmenu_ini()
   -- exp_ini()
@@ -50,21 +82,33 @@ end
 function _update()
   T+=1
   -- m:up()
-  foreach(actors, move_actor)
-  foreach(winds, update_wind)
-  foreach(floats, move_float)
+  for _,a in pairs(actors) do
+    a:update()
+  end
+  for _,w in pairs(windows) do
+    w:update()
+  end
+  for _,f in pairs(floats) do
+    f:update()
+  end
   g.upd()
 end
 
 function _draw()
   cls()
   m:dr()
-  foreach(actors, draw_actor)
-  foreach(winds, draw_wind)
-  g.drw()
-  for f in all(floats) do
-    oprint(f.txt,f.x,f.y,f.c,0)
+  for _,a in pairs(actors) do
+    a:draw()
   end
+  for _,w in pairs(windows) do
+    w:draw()
+  end
+  for _,f in pairs(floats) do
+    f:draw()
+  end
+  g.drw()
+  -- vvvvvvvv debugging vvvvvvvv
+  -- a* path rendering
   for i,p in ipairs(path) do
     local x,y=8*p[1],8*p[2]
     rect(x,y,x+8,y+8,8)
@@ -75,7 +119,8 @@ function _draw()
   cursor(4,4)
   color(7)
   ?"turn order:"..pturn.."/"..#chars
-  print_char(chars[pturn])
+  ?pcurr.name
+  -- print_char(chars[pturn])
   for d in all(debugs) do
     ?d
   end
@@ -83,165 +128,199 @@ function _draw()
   -- end
 end
 
--- make an actor with sprite _sp
--- add it to global collection
--- x,y are pixel coordinates of
--- actor
-function make_actor(_sp,_x,_y,_b)
-  a = {}
-  a.sp=_sp or nil
-  a.spo=0 -- sprite offset
-  a.x=_x or 0
-  a.y=_y or 1
-  a.tx,a.ty=_x,_y
-  a.dx,a.dy=0,0
-  a.ox,a.oy=0,0
-  a.t,a.tdur=0,0
-  a.easef=linear
-  a.frame,a.frames=0,1
-  a.anim,a.cycles=0,2
-  a.flip = false
-  a.ini=0
-  a.ct=0
-  a.i=function(s) return s.x\8 end
-  a.j=function(s) return s.y\8 end
-  add(actors,a)
-  return a
+-- table that holds default
+-- values. useful for stats like
+-- hp, mvmt, etc.
+function statblock(t)
+    local proxy = {}
+    function proxy:reset()
+        for k,v in pairs(self) do
+            if type(v)~='function' then
+                self[k] = nil
+            end
+        end
+    end
+    return setmetatable(proxy, {__index = t})
 end
 
--- draw actor to screen. if a 
--- transparent color _a.ct is set that
--- is not black then will change
--- that color
--- TODO: come remove the local variables
--- here I don't think its saving me
--- any tokens
-function draw_actor(_a)
-  local sp,spo,f = _a.sp,_a.spo,_a.frame
-  local x,y    = _a.x,_a.y
-  if _a.ct>0 then
-    palt(_a.ct,true)
-    palt(0,false)
-  end
-  for p in all(_a.pals) do
-    pal(p)
-  end
-  spr(sp+spo+f,x,y,1,1,_a.flip)
+object={
+  name="",sp=255,
+  x=64,y=64,w=1,h=1,
+  fliplr=false,tx=64,ty=64,
+  dx=0,dy=0,ox=0,oy=0,
+  t=0,tdur=0,
+  atype='none'
+}
+function object:new(o)
+  o = o or {}
+  o.super = object
+  return setmetatable(o, {__index = self})
+end
+-- get map tile coordinates i,j
+function object:i()
+  return self.x\8
+end
+function object:j()
+  return self.y\8
+end
+-- draw sprite, apply palette
+-- swaps if needed
+function object:draw()
+  if (self.sp==0) return
+  -- expects something of the form
+  -- pals = {[1]=3,[5]=8...}
+  if (self.pals) pal(self.pals)
+  -- expects a 16 bit number 
+  -- with bits to turn on/off
+  -- transparency
+  -- e.g. 0b1000000000000000
+  -- makes black transparent
+  if (self.palts) palt(self.palts)
+  spr(self.sp,self.x,self.y,self.w,self.h,self.fliplr)
   pal()
 end
+-- sets tween, does not do any
+  -- actual movement
+function object:set_tween(x,y,d,type)
+  -- prevent tweening before
+  -- we're done with last tween
+  if (self.atype~='none') return
 
--- sets an actors "tween" to go 
--- from current location to 
--- (_x,_y) in duration _d seconds
--- _type sets if it is a full
--- motion or a bump that returns
--- to its start position
-function set_actor_tween(_a,_x,_y,_d,_type)
-  if (_a.anim!=0) return
-
-  _a.tx,_a.ty = _x,_y
-  _a.tdur=flr(_d*fps)
-  _a.dx,_a.dy = (_a.tx-_a.x),(_a.ty-_a.y)
-  _a.ox,_a.oy = _a.x,_a.y
-  _a.anim = _type
+  self.tx,self.ty=x,y
+  self.tdur=flr(d*fps)
+  self.dx,self.dy=(x-self.x),(y-self.y)
+  self.ox,self.oy=self.x,self.y
+  self.atype=type
+  self:set_dir(self.dx,self.dy)
 end
+-- sets sprite direction if 
+-- there is a sprite 
+-- to be changed
+function object:set_dir(dx,dy)
+  if (not self.frames) return
+  self.fliplr = dx<0
+  local fs = self.frame_sets
+  local f
+  if dy < 0 then
+    f = fs[3]
+  elseif dy > 0 then 
+    f = fs[2]
+  else
+    f = fs[1]
+  end
+  self.frames = f
+  self.sp = f[1]
+end
+-- performs actual movement
+-- and updates sprite for 
+-- animation
+function object:move()
+  if (flr(self.tdur)<=0) return
 
--- fulfills the direction made
--- by set_actor_tween. does the
--- actual updating. can use 
--- different easing functions by
--- setting that in the actor 
--- directly
-function move_actor(_a)
-  if (flr(_a.tdur) <= 0) return
-
-  local tme = _a.t
-  -- bump animation
-  if _a.anim==2 and tme>_a.tdur\2 then
-    tme = _a.tdur - tme
+  local tme = self.t
+  if self.atype=='bump' and 
+     tme>self.tdur\2 then
+        tme = self.tdur - tme
   end
 
-  _a.x = _a.easef(tme,_a.ox,_a.dx,_a.tdur)
-  _a.y = _a.easef(tme,_a.oy,_a.dy,_a.tdur)
-  _a.frame=(tme*_a.cycles\_a.tdur)%_a.frames
-
-  _a.t+=1
+  self.x = linear(tme,self.ox,self.dx,self.tdur)
+  self.y = linear(tme,self.oy,self.dy,self.tdur)
   
-  if(_a.t > _a.tdur) then
-    _a.dx,_a.dy  = 0,0
-    _a.ox,_a.oy  = 0,0
-    _a.tx,_a.ty  = 0,0
-    _a.t,_a.tdur = 0,0
-    _a.frame    = 0
-    _a.anim = 0
+  if self.frames then
+    local tt = (tme*4\self.tdur)%#self.frames+1
+    self.sp = self.frames[tt] 
+  end
+
+  self.t+=1
+
+  if (self.t > self.tdur) then
+    self.dx,self.dy  = 0,0
+    self.ox,self.oy  = 0,0
+    self.tx,self.ty  = 0,0
+    self.t,self.tdur = 0,0
+    self.atype = 'none'
+    if (self.frames) self.sp = self.frames[1]
   end
 end
 
--- makes a floating text object
--- at location (x,y) with color 
--- c that lasts for dur seconds
-function make_float(_txt,_x,_y,_c,_dur)
-  _dur = _dur or 1 -- seconds
-  add(floats,{txt=_txt,x=_x,y=_y,ty=_y-10,t=0,tdur=_dur*fps,c=_c})
+actor = object:new()
+function actor:update()
+  self:move()
 end
-
--- animates the float up using a
--- simple exponential lerp
--- will delete float when no
--- longer needed
-function move_float(f)
-  f.t+=1
-  if f.t > f.tdur then
-    del(floats,f)
+function actor:draw()
+  -- draw movement path underneath
+  local tail = self.tail
+  if tail then
+    for n=1,#tail do
+      local x0 = tail[n][1]*8
+      local y0 = tail[n][2]*8
+      rect(x0,y0,x0+7,y0+7,8)
+    end
   end
-  f.y+=(f.ty-f.y)/10
+  -- then draw sprite
+  self.super.draw(self)
+end
+function actor:end_turn()
+  self.stats:reset()
+  self.tail = {}
 end
 
-function make_pc()
-  a = make_actor(34,7*8,7*8)
-  a.name="the knight"
-  a.ct=10
-  a.frames=2
-  a.mvmt=6
-  a.ini=23
-  a.hpmax=40
-  a.hp=a.hpmax
-  a.tail={}
-  a.bktrk=0
-  a.type='pc'
-  a.atksel = 0 -- zero index for attack type
-  a.atks = {
-    {sp=205, name="great sword", dmg="2d6+3", rng=1},
-    {sp=221, name="longbow", dmg="1d8+2", rng=30}
-  }
-  a.atk= a.atks[1]
-  a.opts={204, a.atk.sp, 206, 207} -- combat options
-  a.num_attacks = 2 -- number of attacks pc can make
-  a.pals = {{[14]=5}}
-  return a
+-- windows
+window = object:new{txt="",sp=0}
+function window:new(name,x,y,w,h,bc,ic)
+  local o = {name=name,x=x,y=y,w=w,h=h,bc=bc,ic=ic}
+  return setmetatable(o, {__index = self})
+end
+function window:update()
+  self:move()
+  -- revert text for temporary 
+  -- messages
+  if self.txtdur then
+    self.txtdur-=1
+    if self.txtdur <=0 then
+      self.txt,self.oldtxt = self.oldtxt,nil
+      self.txtdur = nil
+    end
+  end
+end
+function window:draw()
+  text_box(self.txt,self.x,self.y,self.w,self.h,self.bc,self.ic)
+end
+-- sets window text
+-- can be temporary for dur 
+-- seconds
+function window:set_txt(txt,dur)
+  if dur then
+    self.oldtxt = self.txt
+    self.txt = txt
+    self.txtdur = flr(dur*fps)
+    return
+  end
+  if (not self.txtdur) self.txt = txt
 end
 
-function make_en(_sp,_i,_j)
-  local a = make_actor(_sp,_i,_j)
-  a.name='enemy'
-  a.ct=10
-  a.frames=2
-  a.mvmt=4
-  a.ini=16
-  a.hpmax=20
-  a.hp=a.hpmax
-  a.tail={}
-  a.bktrk=0
-  a.type='en'
-  a.atksel = 0 -- zero index for attack type
-  a.atks = {
-    {sp=205, name="great sword", dmg="2d6+3", rng=1}
-  }
-  a.atk= a.atks[1]
-  a.opts={204, a.atk.sp, 206, 207} -- combat options
-  a.num_attacks = 3 -- number of attacks to be made
-  a.pals = {{[6]=5},{[7]=1},{[5]=4},{[1]=0},{[13]=2},{[14]=6}}
-  return a
+-- -- makes a floating text object
+-- -- at location (x,y) with color 
+-- -- c that lasts for dur seconds
+float = {}
+function float:new(txt,x,y,c,dur)
+  c = c or 8
+  dur = dur or 0.5
+  local o = {txt=txt,x=x,y=y,
+            ty=y-6,c=c,t=0,
+            tdur=flr(dur*fps)
+            }
+  return setmetatable(o, {__index = self})
+end
+function float:draw()
+  oprint(self.txt,self.x,self.y,self.c,0)
+end
+function float:update()
+  self.t+=1
+  if self.t > self.tdur then
+    del(floats,self)
+  end
+  self.y+=(self.ty-self.y)/10
 end
 
 function make_map()
@@ -292,69 +371,6 @@ function make_map()
   return m
 end
 
--- windows
--- makes window object held in winds
--- is a child objet of actor so
--- can use actor based functions
-function make_wind(x,y,w,h,ic,bc)
-  local _w = make_actor(nil,x,y)
-  del(actors,_w)-- hacky way to keep window from showin up in actors list
-  -- anim params
-  _w.x,_w.y,_w.tx,_w.ty=x,y,x,y
-  _w.ox,_w.oy,_w.dx,_w.dy=0,0,0,0
-  _w.cx,_w.cy=x,y
-  _w.t,_w.tdur = 0,0
-  -- drawing params
-  _w.w,_w.h=w,h
-  _w.ic,_w.bc=ic,bc
-  
-  add(winds,_w)
-  return _w
-end
-
--- updates window _w by moving
--- it and then checking if the
--- string should be reverted to
--- an older string
-function update_wind(_w)
-  move_actor(_w)
-
-  if _w.strdur!=nil then
-    _w.strdur-=1
-    if _w.strdur<=0 then
-      _w.str,_w.oldstr=_w.oldstr,""
-      _w.strdur=nil
-    end
-  end
-end
-
--- draws a window _w based on 
--- its parameters
-function draw_wind(_w)
-  local x,y,sps = _w.x,_w.y,_w.sps
-  text_box(_w.str,x,y,_w.w,_w.h,_w.ic,_w.bc)
-  if sps and #sps > 0 then
-    for i,s in ipairs(sps) do
-      spr(s,x+4+(i-1)*16,y+4)
-    end
-  end
-end
-
--- sets the string of window _w
--- to _s. optional duration _d
--- will set a new string _s, but
--- revert to old string after _d
--- seconds
-function set_wind_msg(_w,_s,_d)
-  if _d then
-    _w.str,_w.strold = _s,_w.str
-    _w.strdur = flr(_d*fps)
-  end
-
-  if _w.strdur==nil then
-    _w.str = _s
-  end
-end
 -->8
 -- main menu
 
@@ -442,21 +458,40 @@ function cmbt_ini()
   pcurr = chars[pturn]
 -- combat menu
   local x,y,w,h=64,112,64,16
-  winds={} -- clear winds for combat
-  -- text window
-  wtext=make_wind(0,y,w,h,6,5)
-  -- action bins
-  -- TODO: make_bin() func
-  bins={}
-  wmvtxt=make_wind(x+2,y,h-4,h-6,7,0)
-  wmvtxt.open = false
-  bins['wmvtxt']=wmvtxt
-  -- action menu bgnd
-  wbgnd=make_wind(x,y,w,h,7,0)
-  wbgnd.sps = pcurr.opts
-  -- action menu selection wind
-  wsel=make_wind(x+2,y+2,h-4,h-4,-1,9)
-  wsel.s=0
+  windows = {} -- clear global windows
+  -- bin to show movement left
+  wmvtxt = window:new('mvtxt',x+2,y,h-4,h-6,0,7)
+  wmvtxt.rooty,wmvtxt.open = wmvtxt.y,0
+  function wmvtxt:openclose()
+    self.open = (self.open+1)%2
+    self:set_tween(self.x,self.rooty-8*self.open,.25,'walk')
+  end
+  add(windows,wmvtxt)
+  -- background for action sprites
+  wabgnd = window:new('abgnd',x,y,w,h,0,7)
+  wabgnd.sps = pcurr.opts
+  function wabgnd:draw()
+    window.draw(self)
+    local sp1,sp2,sp3,sp4 = unpack(self.sps)
+    local x,y = self.x+4,self.y+4
+    local pcurr_stats = pcurr.stats
+    gspr(pcurr_stats.mvmt==0,sp1,x,y)
+    gspr(pcurr_stats.num_attacks<=0,sp2,x+16,y)
+    -- inventory
+    spr(sp3,x+32,y)
+    -- end turn
+    spr(sp4,x+48,y)
+  end
+  add(windows,wabgnd)
+  -- text box on left
+  wtxt  = window:new('txt',0,y,w,h,5,6)
+  add(windows,wtxt)
+  -- yellow selection window
+  -- ??? should be replaced with
+  -- simple rect?
+  wsel = window:new('sel',x+2,y+2,h-4,h-4,9,-1)
+  wsel.s,wsel.rootx = 0,wsel.x
+  add(windows,wsel)
   
 -- enemy selection
   ens={}
@@ -465,7 +500,7 @@ function cmbt_ini()
 end
 
 function cmbt_upd()
-  set_wind_msg(wtext,"what will "..pcurr.name.." do?")
+  wtxt:set_txt("what will "..pcurr.name.." do?")
 
   -- get button input
   if(buttbuff<0) buttbuff=getbutt()
@@ -477,67 +512,56 @@ function cmbt_upd()
   -- scroll l/r through combat opts
   if buttbuff==0 or buttbuff==1 then
     wsel.s=(wsel.s+dirx[buttbuff+1])%#pcurr.opts
-    wsel.x = wsel.cx+wsel.s*16
+    wsel.x = wsel.rootx+wsel.s*16
+    local words = {'move','attack','inventory','end turn'}
+    wtxt:set_txt(words[wsel.s+1],1)
   end
 
   --scroll u/d through attack opts
   if (buttbuff==2 or buttbuff==3) 
      and wsel.s==1 then
-      pcurr.atksel=(pcurr.atksel+diry[buttbuff+1])%#pcurr.atks
-      pcurr.atk = pcurr.atks[pcurr.atksel+1]
-      pcurr.opts[2] = pcurr.atk.sp
-      set_wind_msg(wtext,pcurr.atk.name..": "..pcurr.atk.dmg,2)
+      pcurr.atk = pcurr.atk%#pcurr.atks + 1
+      local a = pcurr.atks[pcurr.atk]
+      pcurr.opts[2] = a.sp
+      wtxt:set_txt(a.name..": "..a.dmg,2)
   end
 
   -- enter selected modes
   if buttbuff==5 then
     -- movement
     if wsel.s==0 then
-      bsel = bins['wmvtxt']
-      binoc(bsel)
+      -- BUG: can toggle button faster than motion
+      wmvtxt:openclose()
       g.upd = cmbt_move_upd
     -- attacks
     elseif wsel.s==1 then
-      if pcurr.num_attacks>0 then
-        ens = find_actors_in_range(pcurr,pcurr.atk.rng,'en')
+      if pcurr.stats.num_attacks>0 then
+        ens = find_actors_in_range(pcurr,pcurr.atks[pcurr.atk].rng,'en')
         if #ens>0 then
           g.upd = cmbt_atk_upd
           enp = 0
         else
-          set_wind_msg(wtext,'no enemies within range!',1.5)
+          wtxt:set_txt('no enemies within range!',2)
           enp = nil
         end
       else
-        set_wind_msg(wtext,"no more attacks!",1.5)
+        wtxt:set_txt('no more attacks!',2)
       end
     -- inventory
     elseif wsel.s==2 then
 
     -- end turn
     elseif wsel.s==3 then
-      end_turn(pcurr)
+      cmbt_end_turn()
     end
   end
-
-  -- TODO: move to own cmbt_atk_upd function
-  -- scroll through attack opts
-  -- if selwin.s==1 then
-  --   -- 2 => +1 shift
-  --   -- 3 => -1 shift
-  --   if (buttbuff==2 or buttbuff==3) pcurr:rot_att(-2*(buttbuff%2)+1)
-  -- end
 
   buttbuff=-1
 end
 
 function cmbt_drw()
-  -- draw current movement path
-  pc_path(pcurr)
-  -- redraw current player so 
-  -- they appear on top of 
-  -- movement path
-  draw_actor(pcurr)
 
+  -- fun bouncy button
   if g.upd==cmbt_upd then
     bouncebutt(5,wsel.x-4,wsel.y-6,7,0)
   end
@@ -555,35 +579,32 @@ end
 -- loops while we are running through
 -- combat motion
 function cmbt_move_upd()
-  local p = pcurr
 
-  set_wind_msg(wtext,pcurr.name.." is on the move!")
-  set_wind_msg(wmvtxt,5*(pcurr.mvmt-#pcurr.tail-pcurr.bktrk))
+  wtxt:set_txt(pcurr.name.." is on the move!")
+  wmvtxt:set_txt(5*(pcurr.stats.mvmt - #pcurr.tail))
 
   if (buttbuff<0) buttbuff=getbutt()
   if (buttbuff<0) return
 
+  local atype
   -- listen for arrow keys to move
   if buttbuff>=0 and buttbuff<4 then
     local di,dj=dirx[buttbuff+1],diry[buttbuff+1]
-    actor_dir(p,di,dj)
-    if can_move(p,di,dj) and
-        pcurr.anim==0 then
+    if can_move(pcurr,di,dj) and
+        pcurr.atype=='none' then
       if g.drw == cmbt_drw then
-        track_tail(p,di,dj)
+        track_tail(pcurr,di,dj)
       end
-      -- walk
-      set_actor_tween(p,p.x+8*di,p.y+8*dj,0.125,1)
+      atype = 'walk'
     else
-      -- bump
-      set_actor_tween(p,p.x+8*di,p.y+8*dj,0.125,2)
+      atype = 'bump'
     end
+    pcurr:set_tween(pcurr.x+8*di,pcurr.y+8*dj,.25,atype)
   end
 
-  -- done with motion
+  -- motion state exit
   if (buttbuff==5) then
-    binoc(bsel)
-    bsel = nil
+    wmvtxt:openclose()
     g.upd=cmbt_upd
   end
 
@@ -592,9 +613,7 @@ end
 
 -- loops while we are handling combat attack
 function cmbt_atk_upd()
-  local p = pcurr
-
-  set_wind_msg(wtext,"❎confirm 🅾️cancel")
+  wtxt:set_txt("❎confirm 🅾️cancel")
 
   if (buttbuff<0) buttbuff=getbutt()
   if (buttbuff<0) return
@@ -611,39 +630,39 @@ function cmbt_atk_upd()
     g.upd = cmbt_upd
   elseif buttbuff==5 then
     -- complete attack
-    attack(p,ens[enp+1])
+    attack(pcurr,ens[enp+1])
     g.upd=cmbt_upd
   end
 
   buttbuff=-1
 end
 
-function end_turn(p)
-  p.tail = {}
-  p.bktrk = 0
-  p.num_attacks=2
+function cmbt_end_turn()
+  pcurr:end_turn()
   pturn=pturn%#chars + 1
   pcurr = chars[pturn]
+  wsel.s = 0
   if pcurr.type == 'en' then
-    path = a_star(pcurr:i(),pcurr:j(),pc:i(),pc:j())
-    set_wind_msg(wtext,"ai turn!")
-    g.upd = ai_turn_upd
+    pcs = find_actors_in_range(pcurr,16,'pc')
+    path = a_star(pcurr:i(),pcurr:j(),pcs[1]:i(),pcs[1]:j())
+    wtxt:set_txt('ai turn! attacking '..pcs[1].name)
+    g.upd = ai_cmbt_upd
+  else
+    g.upd = cmbt_upd
   end
 end
 
-function ai_turn_upd()
+function ai_cmbt_upd()
   local bot = pcurr
 
   if T%15 == 0 then -- move every half second
     if #path>0 then 
-        local step = deli(path)
-        set_actor_tween(bot,8*step[1],8*step[2],0.25,1)
-        actor_dir(bot,step[1]-bot:i(),step[2]-bot:j())
-    else
-      local pcs = find_actors_in_range(bot,1,'pc')
-      if #pcs>0 and bot.num_attacks>0 then
+      local di,dj = unpack(deli(path))
+      bot:set_tween(8*di,8*dj,0.25,'walk')
+    elseif bot.stats.num_attacks>0 then
         attack(bot,pcs[1])
-      end
+    else
+      cmbt_end_turn()
     end
   end
 end
@@ -653,26 +672,28 @@ end
 function attack(atk,def)
   -- set animation stuff
   local dx,dy=(atk.x-def.x),(atk.y-def.y)
-  set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
-  actor_dir(atk,-dx,-dy)
+  atk:set_tween(atk.x-dx,atk.y-dy,0.2,'bump')
+  -- set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
+  -- actor_dir(atk,-dx,-dy)
 
   -- prevent backtracking after attack
-  atk.bktrk+=#atk.tail
+  atk.stats.mvmt-=#atk.tail
   atk.tail={}
 
   -- roll for damage
-  local dmg = roll_dmg(atk.atk.dmg)
-  make_float("-"..dmg,def.x,def.y,8)
-  def.hp-=dmg
+  local dmg = roll_dmg(atk.atks[atk.atk].dmg)
+  -- make_float("-"..dmg,def.x,def.y,8)
+  add(floats,float:new("-"..dmg,def.x,def.y,8))
+  def.stats.hp-=dmg
   -- remove defending actor from list
   -- if defeated
   -- TODO: probably move this part
   -- outside of attack and into an
   -- update function
-  if def.hp<=0 then
+  if def.stats.hp<=0 then
     del(actors,def)
   end
-  atk.num_attacks-=1
+  atk.stats.num_attacks-=1
 end
 
 -- opens/closes a bin
@@ -706,7 +727,7 @@ function can_move(p,di,dj)
   local test = is_walkable(newi,newj)
   -- Do we have movement left?
   -- Only relevant for combat
-  test = test and (p.mvmt - #p.tail - p.bktrk) > 0
+  test = test and (p.stats.mvmt - #p.tail) > 0
   -- Edge case, need to check if
   -- backtracking our path
   if not test then
@@ -753,18 +774,6 @@ function track_tail(p,di,dj)
     add(nw_tail, {p:i(), p:j()})
   end
   p.tail = nw_tail
-end
-
--- draws tail for current movement
-function pc_path(pc)  
- if #pc.tail == 0 then
-  return
- end
- for n=1,#pc.tail do
-  local x0 = pc.tail[n][1]*8
-  local y0 = pc.tail[n][2]*8
-  rect(x0,y0,x0+7,y0+7,8)
- end
 end
 
 -- rolling initiative
@@ -838,6 +847,12 @@ end
 
 -->8
 --tools
+
+function wait(n)
+  for i=1,n*fps do
+    yield()
+  end
+end
 
 -- finds shortest path from map coordinates
 -- (i0,j0) --> (i1,j1)
@@ -1029,22 +1044,6 @@ function roll_dmg(roll)
   return dmg
 end
 
--- set the correct sprite for 
--- actor a, based on direction
--- di and dj. assumes particualar
--- sprite order of 2 frame motion
--- with right, up, down
-function actor_dir(_a,_di,_dj)
-    if _dj > 0 then
-      _a.spo = 2
-    elseif _dj < 0 then
-      _a.spo = 4
-    else
-      _a.spo = 0
-    end
-    _a.flip = _di < 0
-end
-
 -- sets the palette to gray scale
 -- useful for objects we want to
 -- indicate are not selectable
@@ -1055,6 +1054,15 @@ function grayscale(p)
   -- 2: secondary palette
   p = p or 0
   pal({1,1,5,5,5,6,7,13,6,7,7,6,13,6,7,1}, p)
+end
+
+-- a wrapper on spr that also
+-- calls grayscale if statement
+-- g is true
+function gspr(g,...)
+  if (g) grayscale()
+  spr(...)
+  if (g) pal()
 end
 
 -- checks to see if there is an
@@ -1073,14 +1081,6 @@ end
 function print_char(c,col)
   col = col or 0
   ?c.name
-  ?"init:"..c.ini
-  ?"hp:"..c.hp
-  ?"mvmt:"..c.mvmt
-  ?"bktrk:"..c.bktrk
-  ?"#tail:"..#c.tail
-  ?"atk:"..c.atk.name
-  ?"atkdmg:"..c.atk.dmg
-  ?"atkrng:"..c.atk.rng
 end
 
 -- quick loop to return any btnp
@@ -1151,7 +1151,7 @@ end
 
 -- draws my fancy box with fancy
 -- corners
-function draw_box(x,y,w,h,ic,bc)
+function draw_box(x,y,w,h,bc,ic)
   ic = ic or 5
   bc = bc or 0
   if bc>=0 then
@@ -1169,7 +1169,7 @@ end
 -- the desired box size
 -- can overflow the box height
 -- if h is specified
-function text_box(s,x,y,w,h,ic,bc,tc)
+function text_box(s,x,y,w,h,bc,ic,tc)
   s = s or "" -- string
   w = w or 64  -- box width
   local lines = fit_string(s,w-4)
@@ -1179,7 +1179,7 @@ function text_box(s,x,y,w,h,ic,bc,tc)
   ic = ic or 5 -- fill color
   bc = bc or 0 -- border color
   tc = tc or 0 -- text color
-  draw_box(x,y,w,h,ic,bc)
+  draw_box(x,y,w,h,bc,ic)
   clip(x+2,y+2,w-4,h-4)
   for i,line in ipairs(lines) do
     ?line,x+2,y+2+6*(i-1),tc
