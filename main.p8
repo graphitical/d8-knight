@@ -27,25 +27,7 @@ function _init()
 
 -- making roster
   -- the knight
-  knight = actor:new{name='the knight',x=64,y=64}
-  -- pals and palts interfaces 
-  -- are different :'(
-  knight.pals={[14]=5}
-  knight.palts = 0b0000000000100000
-  knight.sp = 34
-  knight.frames = {34,35}
-  knight.frame_sets = {{34,35},{36,37},{38,39}}
-  knight.stats = statblock{hp=40,num_attacks=2,mvmt=6}
-  knight.tail = {}
-  knight.atk = 1 -- currently selected attack in atks
-  knight.atks = {
-    {sp=205, name="great sword", dmg="2d6+3", rng=1},
-    {sp=221, name="longbow", dmg="1d8+2", rng=30}
-  }
-  knight.opts = {204,205,206,207}
-  knight.type='pc'
-  knight.ini = 21
-  add(actors,knight)
+  make_knight('the knight',64,64)
 
   m = make_map()
   -- replace enemy tiles with 
@@ -54,24 +36,14 @@ function _init()
     for j=0,15 do
       if mget(i,j)==30 then
         mset(i,j,64)
-        en = actor:new{name='the dark knight',x=i*8,y=j*8}
+        en = make_knight('the dark knight',i*8,j*8)
         en.pals  = {[6]=5,[7]=1,[5]=4,[1]=0,[13]=2,[14]=6}
-        en.palts = 0b0000000000100000
-        en.sp = 34
-        en.frames = {34,35}
-        en.frame_sets = {{34,35},{36,37},{38,39}}
         en.type='en'
         en.ini = 19
-        en.stats = statblock{hp=20,mvmt=6,num_attacks=3}
-        en.tail = {}
-        en.atk = 1
-        en.atks = {{sp=205, name="great sword", dmg="2d6+3", rng=1}}
-        add(actors,en)
       end
     end
   end
 
-  -- chars = {knight}
 
   -- mmenu_ini()
   -- exp_ini()
@@ -369,6 +341,32 @@ function make_map()
     end
 
   return m
+end
+
+-- characters
+-- https://roll20.net/compendium/dnd5e/Knight#content
+function make_knight(name,x,y)
+  local k = actor:new{name=name,x=x,y=y}
+  -- pals and palts interfaces 
+  -- are different :'(
+  k.pals={[14]=5}
+  k.palts = 0b0000000000100000
+  k.sp = 34
+  k.frames = {34,35}
+  k.frame_sets = {{34,35},{36,37},{38,39}}
+  k.stats = statblock{ac=18,hp=52,num_attacks=2,mvmt=6}
+  k.abil = statblock{str=16,dex=11,con=14,int=11,wis=11,cha=15}
+  k.tail = {}
+  k.atk = 1 -- currently selected attack in atks
+  k.atks = {
+    {sp=205, to_hit=5, name="great sword", dmg="2D6+3", rng=1},
+    {sp=221, to_hit=2, name="heavy crossbow", dmg="1D10", rng=20}
+  }
+  k.opts = {204,205,206,207}
+  k.type='pc'
+  k.ini = 21
+  add(actors,k)
+  return k
 end
 
 -->8
@@ -669,31 +667,31 @@ end
 
 -- performs attack from actor atk
 -- to actor def 
+-- TODO: lots of chances for 
+-- token optimization
 function attack(atk,def)
+  local def_x,def_y=def.x,def.y
+  local astats,dstats = atk.stats,def.stats
+  local a = atk.atks[atk.atk]
+
   -- set animation stuff
-  local dx,dy=(atk.x-def.x),(atk.y-def.y)
-  atk:set_tween(atk.x-dx,atk.y-dy,0.2,'bump')
-  -- set_actor_tween(atk,atk.x-dx,atk.y-dy,0.2,2)
-  -- actor_dir(atk,-dx,-dy)
+  atk:set_tween(def_x,def_y,0.2,'bump')
 
   -- prevent backtracking after attack
-  atk.stats.mvmt-=#atk.tail
+  astats.mvmt-=#atk.tail
   atk.tail={}
 
-  -- roll for damage
-  local dmg = roll_dmg(atk.atks[atk.atk].dmg)
-  -- make_float("-"..dmg,def.x,def.y,8)
-  add(floats,float:new("-"..dmg,def.x,def.y,8))
-  def.stats.hp-=dmg
-  -- remove defending actor from list
-  -- if defeated
-  -- TODO: probably move this part
-  -- outside of attack and into an
-  -- update function
-  if def.stats.hp<=0 then
-    del(actors,def)
+  -- roll for attack
+  if roll_atk(a.to_hit, dstats.ac) then
+    -- roll for damage
+    local dmg = roll_dmg(a.dmg)
+    add(floats,float:new("-"..dmg,def_x,def_y,8))
+    dstats.hp-=dmg
+  else
+    add(floats,float:new(":(",atk.x,atk.y,9))
+    wtxt:set_txt(pcurr.name.." missed!",2)
   end
-  atk.stats.num_attacks-=1
+  astats.num_attacks-=1
 end
 
 -- opens/closes a bin
@@ -1022,6 +1020,11 @@ function bouncebutt(_b,_x,_y,_c1,_c2)
   oprint(bb,_x,_y,_c1,_c2,4)
 end
 
+-- roll to attack
+function roll_atk(to_hit,def_ac)
+  return rollad(20) + to_hit >= def_ac
+end
+
 -- parses an actors dmg string
 -- to generate the damage
 -- e.g. actor dmg is '2d6+4'
@@ -1030,7 +1033,7 @@ end
 -- return that value
 function roll_dmg(roll)
   -- find number before the d
-  local t1 = split(roll,'d')
+  local t1 = split(roll,'D')
   -- find the number after the d
   -- find the number after the +
   local t2 = split(t1[2],'+')
@@ -1040,7 +1043,7 @@ function roll_dmg(roll)
   for i=1,t1[1] do
     dmg+=rollad(t2[1])
   end
-  dmg+=t2[2]
+  if (t2[2]) dmg+=t2[2]
   return dmg
 end
 
