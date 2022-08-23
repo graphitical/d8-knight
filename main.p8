@@ -27,7 +27,7 @@ function _init()
 
 -- making roster
   -- the knight
-  make_knight('the knight',64,64)
+  knight = make_knight('the knight',64,64)
 
   m = make_map()
   -- replace enemy tiles with 
@@ -57,9 +57,6 @@ function _update()
   for _,a in pairs(actors) do
     a:update()
   end
-  for _,w in pairs(windows) do
-    w:update()
-  end
   for _,f in pairs(floats) do
     f:update()
   end
@@ -71,9 +68,6 @@ function _draw()
   m:dr()
   for _,a in pairs(actors) do
     a:draw()
-  end
-  for _,w in pairs(windows) do
-    w:draw()
   end
   for _,f in pairs(floats) do
     f:draw()
@@ -90,8 +84,6 @@ function _draw()
 
   cursor(4,4)
   color(7)
-  ?"turn order:"..pturn.."/"..#chars
-  ?pcurr.name
   -- print_char(chars[pturn])
   for d in all(debugs) do
     ?d
@@ -104,15 +96,19 @@ end
 -- values. useful for stats like
 -- hp, mvmt, etc.
 function statblock(t)
-    local proxy = {}
-    function proxy:reset()
-        for k,v in pairs(self) do
-            if type(v)~='function' then
-                self[k] = nil
-            end
-        end
+  local d = {}
+  for k,v in pairs(t) do
+    d[k] = v
+  end
+  t.__def = d
+
+  function t:reset()
+    for k,v in pairs(self.__def) do
+      self[k] = v
     end
-    return setmetatable(proxy, {__index = t})
+  end
+
+  return t
 end
 
 object={
@@ -459,12 +455,6 @@ function cmbt_ini()
   windows = {} -- clear global windows
   -- bin to show movement left
   wmvtxt = window:new('mvtxt',x+2,y,h-4,h-6,0,7)
-  -- wmvtxt.rooty,wmvtxt.open = wmvtxt.y,0
-  -- function wmvtxt:openclose()
-  --   self.open = (self.open+1)%2
-  --   self:set_tween(self.x,self.rooty-8*self.open,.25,'walk')
-  -- end
-  -- add(windows,wmvtxt)
   -- text box
   wtxt  = window:new('',0,128-h,128,h,5,6)
   add(windows,wtxt)
@@ -481,28 +471,6 @@ function cmbt_ini()
     self:state_draw()
   end
   add(windows,wsel)
-  -- background for action sprites
-  -- wabgnd = window:new('abgnd',x,y,w,h,0,7)
-  -- wabgnd.sps = pcurr.opts
-  -- function wabgnd:draw()
-  --   window.draw(self)
-  --   local sp1,sp2,sp3,sp4 = unpack(self.sps)
-  --   local x,y = self.x+4,self.y+4
-  --   local pcurr_stats = pcurr.stats
-  --   gspr(pcurr_stats.mvmt==0,sp1,x,y)
-  --   gspr(pcurr_stats.num_attacks<=0,sp2,x+16,y)
-  --   -- inventory
-  --   spr(sp3,x+32,y)
-  --   -- end turn
-  --   spr(sp4,x+48,y)
-  -- end
-  -- add(windows,wabgnd)
-  -- yellow selection window
-  -- ??? should be replaced with
-  -- simple rect?
-  -- wsel = window:new('sel',x+2,y+2,h-4,h-4,9,-1)
-  -- wsel.s,wsel.rootx = 0,wsel.x
-  -- add(windows,wsel)
   
 -- enemy selection
   ens={}
@@ -538,6 +506,11 @@ function wsel_draw_action(self)
   text_box(txt,0,sy-h,w,h,0,7)
 end 
 
+function cmbt_sel_drw()
+  wtxt:draw()
+  wsel:draw()
+end
+
 function cmbt_act_upd()
 
   if(buttbuff<0) buttbuff=getbutt()
@@ -552,6 +525,7 @@ function cmbt_act_upd()
     wsel.s=(wsel.s+d)%#pcurr.acts
   end
 
+  -- go back to normal combat
   if buttbuff==4 then
     g.upd = cmbt_upd
     wsel.state_draw = wsel_draw_root
@@ -562,22 +536,34 @@ function cmbt_act_upd()
     if wsel.s == 0 then
       g.upd = cmbt_move_upd
       wsel.hide = true
-
     else
+      if pcurr.stats.num_attacks>0 then
+        ens = find_actors_in_range(pcurr,pcurr.acts[wsel.s+1].rng,'en')
+        if #ens>0 then
+          g.upd = cmbt_atk_upd
+          enp = 0
+        else
+          wtxt:set_txt('no enemies within range!',2)
+          enp = nil
+        end
+      else
+        wtxt:set_txt('no more attacks!',2)
+      end
 
     end
 
   end
 
   buttbuff = -1
+end
 
+function cmbt_act_drw()
 end
 
 function cmbt_upd()
 
   -- get button input
   if(buttbuff<0) buttbuff=getbutt()
-
   -- no button input
   if (buttbuff<0) return
 
@@ -592,45 +578,16 @@ function cmbt_upd()
     if wsel.s == 0 then
       wsel.state_draw = wsel_draw_action
       g.upd = cmbt_act_upd
-      wtxt:set_txt("\151confirm\n\142cancel")
+      wtxt:set_txt("\151confirm\n\142back")
+    elseif wsel.s == 3 then
+      cmbt_end_turn()
     end
   end
-
-  -- -- enter selected modes
-  -- if buttbuff==5 then
-  --   -- movement
-  --   if wsel.s==0 then
-  --     -- BUG: can toggle button faster than motion
-  --     wmvtxt:openclose()
-  --     g.upd = cmbt_move_upd
-  --   -- attacks
-  --   elseif wsel.s==1 then
-  --     if pcurr.stats.num_attacks>0 then
-  --       ens = find_actors_in_range(pcurr,pcurr.atks[pcurr.atk].rng,'en')
-  --       if #ens>0 then
-  --         g.upd = cmbt_atk_upd
-  --         enp = 0
-  --       else
-  --         wtxt:set_txt('no enemies within range!',2)
-  --         enp = nil
-  --       end
-  --     else
-  --       wtxt:set_txt('no more attacks!',2)
-  --     end
-  --   -- inventory
-  --   elseif wsel.s==2 then
-
-  --   -- end turn
-  --   elseif wsel.s==3 then
-  --     cmbt_end_turn()
-  --   end
-  -- end
 
   buttbuff=-1
 end
 
 function cmbt_drw()
-
   -- marching ants for attack select
   -- only care about if we're in
   -- attack mode
@@ -640,28 +597,29 @@ function cmbt_drw()
     end
   end
 
+  cmbt_state_drw()
 
-  --
+  -- hp info
   local x,y,w,h = 70,80,128-76,20
   oprint(pcurr.name,x,y,7)
   y+=8
   oprint("HP",x,y,7)
+  local hp,dhp = pcurr.stats.hp,pcurr.stats.__def.hp
+  -- rectfill(x+8+2,y+3,x+w-3,y+1+5,5) -- shadow?
   rectfill(x+8,y+1,x+w-4,y+1+4,0)
-  rectfill(x+8+1,y+2,x+w-5,y+4,3)
+  rectfill(x+8+1,y+2,x+w*hp/dhp-5,y+4,3)
   y+=6
-  oprint(pcurr.stats.hp.."/"..pcurr.stats.hp,x+w\2-10,y,7)
+  oprint(hp.."/"..dhp,x+w\2-10,y,7)
   y+=6
   oline(x,y,x+w,y,0,7)
   oline(x+w,y-24,x+w,y,0,7)
-  -- line(x+w,y-h)
-  -- rectfill(x,y-2-4,x+w-2,y-2,0)
 end
 
 -- loops while we are running through
 -- combat motion
 function cmbt_move_upd()
 
-  wtxt:set_txt(pcurr.name.." is on the move!")
+  wtxt:set_txt(pcurr.name.." is on the move! \151confirm\n\142back")
   wmvtxt:set_txt(5*(pcurr.stats.mvmt - #pcurr.tail))
 
   if (buttbuff<0) buttbuff=getbutt()
@@ -684,17 +642,25 @@ function cmbt_move_upd()
   end
 
   -- motion state exit
-  if (buttbuff==5) then
-    -- wmvtxt:openclose()
-    g.upd=cmbt_upd
+  if buttbuff>=4 then
+    wsel.hide = false
+    wtxt:set_txt()
+    if buttbuff == 4 then
+      g.upd = cmbt_act_upd
+      wsel.state_draw = wsel_draw_action
+      wtxt:set_txt("\151confirm\n\142back")
+    else
+      g.upd = cmbt_upd
+      wsel.state_draw = wsel_draw_root
+      wsel.s=0
+    end
   end
-
   buttbuff=-1
 end
 
 -- loops while we are handling combat attack
 function cmbt_atk_upd()
-  wtxt:set_txt("❎confirm 🅾️cancel")
+  wtxt:set_txt("❎confirm\n🅾️back")
 
   if (buttbuff<0) buttbuff=getbutt()
   if (buttbuff<0) return
@@ -741,6 +707,7 @@ function ai_cmbt_upd()
       local di,dj = unpack(deli(path))
       bot:set_tween(8*di,8*dj,0.25,'walk')
     elseif bot.stats.num_attacks>0 then
+        wsel.s = 1
         attack(bot,pcs[1])
     else
       cmbt_end_turn()
@@ -755,7 +722,7 @@ end
 function attack(atk,def)
   local def_x,def_y=def.x,def.y
   local astats,dstats = atk.stats,def.stats
-  local a = atk.acts[atk.atk]
+  local a = atk.acts[wsel.s+1]
 
   -- set animation stuff
   atk:set_tween(def_x,def_y,0.2,'bump')
@@ -765,9 +732,10 @@ function attack(atk,def)
   atk.tail={}
 
   -- roll for attack
-  if roll_atk(a.to_hit, dstats.ac) then
+  local hit, crit = roll_atk(a.to_hit, dstats.ac)
+  if hit then
     -- roll for damage
-    local dmg = roll_dmg(a.dmg)
+    local dmg = roll_dmg(a.dmg,crit)
     add(floats,float:new("-"..dmg,def_x,def_y,8))
     dstats.hp-=dmg
   else
@@ -1105,7 +1073,8 @@ end
 
 -- roll to attack
 function roll_atk(to_hit,def_ac)
-  return rollad(20) + to_hit >= def_ac
+  local roll = rollad(20)
+  return roll + to_hit >= def_ac, roll==20
 end
 
 -- parses an actors dmg string
@@ -1114,9 +1083,11 @@ end
 -- this function will roll 2d6
 -- and add 4 to the result and 
 -- return that value
-function roll_dmg(roll)
+function roll_dmg(roll,crit)
+  crit = crit or false
   -- find number before the d
   local t1 = split(roll,'D')
+  if (crit) t1[1]*=2
   -- find the number after the d
   -- find the number after the +
   local t2 = split(t1[2],'+')
