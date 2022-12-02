@@ -642,7 +642,14 @@ function cmbt_end_turn()
   wsel.s = 0
   if pcurr.type == 'en' then
     pcs = find_actors_in_range(pcurr,16,'pc')
-    path = a_star(pcurr:i(),pcurr:j(),pcs[1]:i(),pcs[1]:j())
+    local closest = 256
+    for _,pc in pairs(pcs) do
+      if dist({pcurr:i(), pcurr:j()}, {pc:i(), pc:j()}) > closest then
+        break
+      end
+      path = a_star(pcurr:i(),pcurr:j(),pc:i(),pc:j())
+      closest = min(closest,#path)
+    end
     wtxt:set_txt('ai turn! attacking '..pcs[1].name)
     g.upd = ai_cmbt_upd
   else
@@ -856,8 +863,7 @@ end
 -- (i0,j0) --> (i1,j1)
 -- https://gist.github.com/damienstanton/7de65065bf584a43f96a
 -- https://github.com/lattejed/a-star-lua/blob/master/a-star.lua
-function a_star(i0,j0,i1,j1,h)
-  h = h or dist
+function a_star(i0,j0,i1,j1)
   local start = {i0,j0}
   local goal  = {i1,j1}
   local closedset = {}
@@ -867,7 +873,7 @@ function a_star(i0,j0,i1,j1,h)
   local g_score, f_score = {}, {}
   local istart = v2i(start)
   g_score[istart] = 0
-  f_score[istart] = h(start,goal)
+  f_score[istart] = dist(start,goal,'5e')
 
   while #openset>0 and #openset<1000 do
     -- get node in openset with lowest f_score
@@ -904,7 +910,7 @@ function a_star(i0,j0,i1,j1,h)
     del(openset,current)
     add(closedset,current)
     
-    -- generate cardinal direction
+    -- generate 8-direction
     -- children
     local neighbors = get_neighbors(current)
     -- add(debugs,"#neighbors:"..#neighbors)
@@ -921,7 +927,7 @@ function a_star(i0,j0,i1,j1,h)
         if not is_in(openset, neighbor) or tentative_g_score < g_score[ineighbor] then
           came_from[ineighbor] = current
           g_score[ineighbor]   = tentative_g_score
-          f_score[ineighbor]   = tentative_g_score + h(neighbor,goal)
+          f_score[ineighbor]   = tentative_g_score + dist(neighbor,goal,'5e')
           if not is_in(openset,neighbor) then
             add(openset,neighbor)
           end
@@ -948,7 +954,7 @@ end
 
 function get_neighbors(node)
   local neighbors = {}
-  for i=1,4 do
+  for i=1,8 do
     local newi,newj=node[1]+dirx[i],node[2]+diry[i]
     if (is_walkable(newi,newj)) add(neighbors,{newi,newj})
   end
@@ -985,6 +991,7 @@ end
 -- two 2D points a and b. types are
 -- 'man': manhattan distance (l1-norm)
 -- 'euc': euclidean distance (l2-norm)
+-- '5e': DnD 5th edition movement
 function dist(a,b,type)
   type = type or 'euc'
   local dx,dy = (b[1]-a[1]),(b[2]-a[2])
@@ -992,6 +999,8 @@ function dist(a,b,type)
     return sqrt(dx*dx+dy*dy)
   elseif type=='man' then
     return abs(dx) + abs(dy)
+  elseif type=='5e' then
+    return max(abs(dx),abs(dy))
   end
   return nil
 end
@@ -1124,7 +1133,7 @@ function find_actors_in_range(p,r,t)
       local pi,pj,ai,aj = p:i(),p:j(),a:i(),a:j()
       if in_range(pi,pj,ai,aj,r) then
         add(c,a)
-        add(dists,dist({pi,pj},{ai,aj}))
+        add(dists,dist({pi,pj},{ai,aj}, '5e'))
       end
     end
   end
