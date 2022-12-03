@@ -775,9 +775,20 @@ function track_tail(p,di,dj)
     add(nw_tail,q)
   end
 
+  -- if this move is not a
+  -- backtrack, we add cur
+  -- position to the tail
   if #nw_tail >= #p.tail then
       add(nw_tail, {p:i(), p:j()})
     end
+
+  -- if this move is adjacent
+  -- to 2nd-to-last member of
+  -- nw_tail, remove the last
+  while #nw_tail>1 and is_in(get_neighbors({newi,newj}),nw_tail[#nw_tail-1]) do
+    deli(nw_tail, #nw_tail)
+  end
+
   p.tail = nw_tail
 end
 
