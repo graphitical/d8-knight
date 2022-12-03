@@ -534,7 +534,7 @@ function cmbt_upd()
     -- attacks
     elseif wsel.s==1 then
       if pcurr.stats.num_attacks>0 then
-        ens = find_actors_in_range(pcurr,pcurr.atks[pcurr.atk].rng,'en')
+        ens = find_actors_in_range(pcurr,pcurr.atks[pcurr.atk].rng,'en','euc')
         if #ens>0 then
           g.upd = cmbt_atk_upd
           enp = 0
@@ -776,8 +776,8 @@ function track_tail(p,di,dj)
   end
 
   if #nw_tail >= #p.tail then
-    add(nw_tail, {p:i(), p:j()})
-  end
+      add(nw_tail, {p:i(), p:j()})
+    end
   p.tail = nw_tail
 end
 
@@ -873,7 +873,7 @@ function a_star(i0,j0,i1,j1)
   local g_score, f_score = {}, {}
   local istart = v2i(start)
   g_score[istart] = 0
-  f_score[istart] = dist(start,goal,'5e')
+  f_score[istart] = dist(start,goal,'mvmt')
 
   while #openset>0 and #openset<1000 do
     -- get node in openset with lowest f_score
@@ -927,7 +927,7 @@ function a_star(i0,j0,i1,j1)
         if not is_in(openset, neighbor) or tentative_g_score < g_score[ineighbor] then
           came_from[ineighbor] = current
           g_score[ineighbor]   = tentative_g_score
-          f_score[ineighbor]   = tentative_g_score + dist(neighbor,goal,'5e')
+          f_score[ineighbor]   = tentative_g_score + dist(neighbor,goal,'mvmt')
           if not is_in(openset,neighbor) then
             add(openset,neighbor)
           end
@@ -991,7 +991,7 @@ end
 -- two 2D points a and b. types are
 -- 'man': manhattan distance (l1-norm)
 -- 'euc': euclidean distance (l2-norm)
--- '5e': DnD 5th edition movement
+-- 'mvmt':  "free diagonals" movement rules
 function dist(a,b,type)
   type = type or 'euc'
   local dx,dy = (b[1]-a[1]),(b[2]-a[2])
@@ -999,7 +999,7 @@ function dist(a,b,type)
     return sqrt(dx*dx+dy*dy)
   elseif type=='man' then
     return abs(dx) + abs(dy)
-  elseif type=='5e' then
+  elseif type=='mvmt' then
     return max(abs(dx),abs(dy))
   end
   return nil
@@ -1112,28 +1112,21 @@ end
 function linear(t,b,c,d)
   return c*t/d+b
 end
-
--- used to see if an attack can 
--- land. dnd rules say a square 
--- is 5 feet so we don't worry
--- about euclidean norm
-function in_range(x0,y0,x1,y1,r)
-  return (abs(x0-x1)<=r) and (abs(y0-y1)<=r)
-end
   
 -- find all actors of type t 
 -- within range r of character p
 -- sort by closest
-function find_actors_in_range(p,r,t)
-  r = r or 1
+function find_actors_in_range(p,r,t,dist_type)
+  dist_type = dist_type or 'mvmt'
   local c = {}
   local dists = {}
   for a in all(actors) do
     if a.type==t then
       local pi,pj,ai,aj = p:i(),p:j(),a:i(),a:j()
-      if in_range(pi,pj,ai,aj,r) then
+      d = dist({pi,pj},{ai,aj}, dist_type)
+      if d < r then
         add(c,a)
-        add(dists,dist({pi,pj},{ai,aj}, '5e'))
+        add(dists,d)
       end
     end
   end
