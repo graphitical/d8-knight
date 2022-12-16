@@ -965,9 +965,15 @@ end
 
 function get_neighbors(node)
   local neighbors = {}
-  for i=1,8 do
-    local newi,newj=node[1]+dirx[i],node[2]+diry[i]
-    if (is_walkable(newi,newj)) add(neighbors,{newi,newj})
+  local i,j = unpack(node)
+
+  for k=1,8 do
+    local newi = i + dirx[k]
+    local newj = j + diry[k]
+
+    if is_walkable(newi, newj) and is_walkable(i, newj) and is_walkable(newi, j) then
+      add(neighbors,{newi, newj})
+    end
   end
   return neighbors
 end
