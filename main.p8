@@ -3,6 +3,49 @@ version 36
 __lua__
 -- main
 
+key = -1
+
+-- ***** WINDOW STACK ***** --
+WindowStack = {}
+function WindowStack:new()
+  local o = {stack={}}
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+function WindowStack:push(window)
+  add(self.stack,window)
+end
+function WindowStack:pop()
+  return deli(self.stack)
+end
+function WindowStack:peek()
+  return self.stack[#self.stack]
+end
+function WindowStack:update()
+  self:peek():update()
+end
+function WindowStack:draw()
+  for window in all(self.stack) do
+    window:draw()
+  end
+end
+
+-- ***** WINDOW ***** --
+Window = {}
+function Window:new(name,x,y,w,h,bc,ic)
+  local o = {name=name,x=x,y=y,w=w,h=h,bc=bc,ic=ic,s=0}
+  setmetatable(o, self)
+  self.__index = self
+  return o
+end
+function Window:draw()
+  draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+end
+function Window:update()
+  -- ??? what do we do here?
+end
+
 function _init()
 -- global tables for game
 -- can be modified by game
@@ -11,16 +54,15 @@ function _init()
   actors = {}
   chars = {}
   ens = {}
-  windows = {}
   floats={}
   debugs = {}
   path = {}
+  windowStack = WindowStack:new()
 
 -- useful parameters 
   T = 0
   timer = 0
   dt = 0
-  buttbuff=-1
   debug = true
   -- debug = false
   fps = 30
@@ -53,7 +95,8 @@ end
 
 function _update()
   T+=1
-  -- m:up()
+  key = checkKeyPressed()
+  windowStack:update()
   for _,a in pairs(actors) do
     a:update()
   end
@@ -61,11 +104,13 @@ function _update()
     f:update()
   end
   g.upd()
+  key = -1
 end
 
 function _draw()
   cls()
   m:dr()
+  windowStack:draw()
   for _,a in pairs(actors) do
     a:draw()
   end
@@ -233,39 +278,42 @@ function actor:end_turn()
   self.tail = {}
 end
 
--- windows
-window = object:new{txt="",sp=0}
-function window:new(name,x,y,w,h,bc,ic)
-  local o = {name=name,x=x,y=y,w=w,h=h,bc=bc,ic=ic}
-  return setmetatable(o, {__index = self})
-end
-function window:update()
-  self:move()
-  -- revert text for temporary 
-  -- messages
-  if self.txtdur then
-    self.txtdur-=1
-    if self.txtdur <=0 then
-      self.txt,self.oldtxt = self.oldtxt,nil
-      self.txtdur = nil
-    end
-  end
-end
-function window:draw()
-  text_box(self.txt,self.x,self.y,self.w,self.h,self.bc,self.ic)
-end
--- sets window text
--- can be temporary for dur 
--- seconds
-function window:set_txt(txt,dur)
-  if dur then
-    self.oldtxt = self.txt
-    self.txt = txt
-    self.txtdur = flr(dur*fps)
-    return
-  end
-  if (not self.txtdur) self.txt = txt
-end
+-- windowStack
+-- window = object:new{txt="",sp=0}
+-- function window:new(name,x,y,w,h,bc,ic)
+--   local o = {name=name,x=x,y=y,w=w,h=h,bc=bc,ic=ic}
+--   return setmetatable(o, {__index = self})
+-- end
+-- function window:upd()
+--   self:move()
+--   -- revert text for temporary 
+--   -- messages
+--   if self.txtdur then
+--     self.txtdur-=1
+--     if self.txtdur <=0 then
+--       self.txt,self.oldtxt = self.oldtxt,nil
+--       self.txtdur = nil
+--     end
+--   end
+-- end
+-- function window:draw()
+--   text_box(self.txt,self.x,self.y,self.w,self.h,self.bc,self.ic)
+-- end
+-- -- sets window text
+-- -- can be temporary for dur 
+-- -- seconds
+-- function window:set_txt(txt,dur)
+--   if dur then
+--     self.oldtxt = self.txt
+--     self.txt = txt
+--     self.txtdur = flr(dur*fps)
+--     return
+--   end
+--   if (not self.txtdur) self.txt = txt
+-- end
+-- function window:pop_self()
+--   del(windowStack,self)
+-- end
 
 -- -- makes a floating text object
 -- -- at location (x,y) with color 
@@ -450,154 +498,153 @@ function cmbt_ini()
   order_chars()
   pturn = 1
   pcurr = chars[pturn]
--- combat menu
+-- combat menu stack
+  windowStack = WindowStack:new()
   local x,y,w,h=64,112,86,24
-  windows = {} -- clear global windows
-  -- bin to show movement left
-  wmvtxt = window:new('mvtxt',x+2,y,h-4,h-6,0,7)
-  -- text box
-  wtxt  = window:new('',0,128-h,128,h,5,6)
-  add(windows,wtxt)
-  wsel = window:new('',128-w,128-h,w,h,0,7)
-  wsel.s = 0
-  wsel.base_txt = {"action","special","inventory","end turn"}
-  wsel.txt = wsel.base_txt
-  wsel.hide = false
-  wsel.state_draw = wsel_draw_root
-  function wsel:draw()
-    if (self.hide) return
-    local sx,sy,ws=self.x,self.y,self.s
-    draw_box(sx,sy,self.w,self.h,0,7)
-    self:state_draw()
+
+  -- ***** SELECTION MENU *****
+  local selectionWindow = Window:new('selection',128-w,128-h,w,h,0,7)
+  selectionWindow.items = {'actions','special','inventory','end'}
+  selectionWindow.handlers={combatActionsClick}
+  selectionWindow.arrowHandler = selectionClick
+  selectionWindow.oHandler = nil
+  selectionWindow.xHandler = combatActionsClick
+  function selectionWindow:draw()
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    for i, item in ipairs(self.items) do
+      ?item,self.x+6+36*((i-1)\2),self.y+4+10*((i-1)%2),0
+    end
+    ?"\23",self.x+2+36*(self.s\2),self.y+4+10*(self.s%2),0
   end
-  add(windows,wsel)
-  
+  function selectionWindow:update()
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+      local d = dirx[key+1] | diry[key+1]
+      self.s=(self.s+d)%#self.items
+    end
+    if (key == 4) then
+      self.s=3 -- go to end
+    end
+    if (key == 5) then
+      self.xHandler()
+    end
+  end
+  windowStack:push(selectionWindow)
+
+
+
+  -- ***** MOVE MENU *****
+  local moveWindow = Window:new('move',128-w-60,128-h,w,h,0,7)
+  moveWindow.txt = {'on the move!'}
+  function moveWindow:draw()
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    ?self.txt[1],self.x+6,self.y+2,0
+  end
+  function moveWindow:update()
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+      local di,dj=dirx[key+1],diry[key+1]
+      local atype = 'bump'
+      if can_move(pcurr,di,dj) and
+          pcurr.atype=='none' then
+        if g.drw == cmbt_drw then
+          track_tail(pcurr,di,dj)
+        end
+        atype = 'walk'
+      end
+      pcurr:set_tween(pcurr.x+8*di,pcurr.y+8*dj,.25,atype)
+    end
+    if (key == 4 or key == 5) windowStack:pop()
+  end
+
+  -- ***** ATTACK MENU *****
+  local attackWindow = Window:new('attack',128-w,128-h,w,h,0,7)
+  attackWindow.txt = {'attack!'}
+  function attackWindow:draw()
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    ?self.txt[1],self.x+6,self.y+2,0
+  end
+  function attackWindow:update()
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+
+    end
+    if (key == 4 or key == 5) windowStack:pop()
+  end
+
+  -- ***** SPECIAL MENU *****
+  -- subwin = Window:new('special',128-w,128-h,w,h,0,7)
+
+  -- ***** INVENTORY MENU *****
+  -- subwin = Window:new('inventory',128-w,128-h,w,h,0,7)
+
+  -- ----- move sub-sub-window ----
+  -- wmove = window:new('move',128-w,128-h,w,h,0,7)
+  -- wmove.txt = {'on the move!'}
+  -- function wmove:upd(bb)
+  --   if (bb>=4) then
+  --     self:pop_self()
+  --     return
+  --   end
+  -- end
+  -- add(wact.sub_wins,wmove)
+  -- ------------------------------
+  -- ----- attack sub-sub-window --
+  -- watk = window:new('attack',128-w,128-h,w,h,0,7)
+  -- watk.txt = {'attack!'}
+
+  -- function watk:draw()
+  --   window.draw(self)
+  --   for i,e in ipairs(ens) do
+  --       ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
+  --   end
+  -- end
+  -- function watk:upd(bb)
+  --   if (bb==4) then
+  --     self:pop_self()
+  --     return
+  --   end
+  --   ens = {}
+  --   enp = nil
+  --   if pcurr.stats.num_attacks<=0 then
+  --     self.txt = {'no more attacks :('}
+  --     return
+  --   else
+  --     ens = find_actors_in_range(pcurr,pcurr.acts[wact.s+1].rng,'en')
+  --     if #ens<=0 then
+  --       self.txt={'no enemies within range!'}
+  --       return
+  --     end
+  --     self.txt={#ens.." enemies in range"}
+  --     enp = 0
+  --   end
+
+  --   if bb==2 or bb==3 then
+  --     enp+=diry[bb+1]
+  --     enp=enp%#ens
+  --   end
+
+  --   if bb==5 then
+  --     attack(pcurr,ens[enp+1],wact.s)
+  --   end
+  -- end
+  -- add(wact.sub_wins,watk)
+  -- -- hacky way to ensure both 
+  -- -- types of attacks work
+  -- add(wact.sub_wins,watk)
+
+
 -- enemy selection
   ens={}
   enp=nil
 
 end
 
-function wsel_draw_root(self)
-  local sx,sy,ws=self.x,self.y,self.s
-  local x1,y1 = sx+8,sy+4
-  for _i=0,3 do
-    local t = self.txt[_i+1] or "-"
-    ?t,x1+36*(_i\2),y1+10*(_i%2),0
-  end
-  ?"\23",sx+3+36*(ws\2),sy+4+10*(ws%2),0
-end
-
-function wsel_draw_action(self)
-  local sx,sy,ws=self.x,self.y,self.s
-  local x1,y1 = sx+8,sy+2
-  for k,v in pairs(pcurr.acts) do
-    ?v.name,x1,y1+(k-1)*5,0
-  end
-  ?"\23",sx+3,y1+5*ws
-
-  local w,h = 64,16
-  -- local txt = ""
-  if wsel.s==0 then
-    txt = tostr(5*(pcurr.stats.mvmt - #pcurr.tail).."/"..5*pcurr.stats.mvmt)
-  else
-    txt = pcurr.acts[wsel.s+1].name.." "..pcurr.acts[wsel.s+1].dmg
-  end
-  text_box(txt,0,sy-h,w,h,0,7)
-end 
-
-function cmbt_sel_drw()
-  wtxt:draw()
-  wsel:draw()
-end
-
-function cmbt_act_upd()
-
-  if(buttbuff<0) buttbuff=getbutt()
-
-  -- no button input
-  if (buttbuff<0) return
-
--- menu selection
-  -- scroll through combat opts
-  if buttbuff<4 then
-    local d = dirx[buttbuff+1] | diry[buttbuff+1]
-    wsel.s=(wsel.s+d)%#pcurr.acts
-  end
-
-  -- go back to normal combat
-  if buttbuff==4 then
-    g.upd = cmbt_upd
-    wsel.state_draw = wsel_draw_root
-    wtxt:set_txt()
-  end
-
-  if buttbuff==5 then
-    if wsel.s == 0 then
-      g.upd = cmbt_move_upd
-      wsel.hide = true
-    else
-      if pcurr.stats.num_attacks>0 then
-        ens = find_actors_in_range(pcurr,pcurr.acts[wsel.s+1].rng,'en')
-        if #ens>0 then
-          g.upd = cmbt_atk_upd
-          enp = 0
-        else
-          wtxt:set_txt('no enemies within range!',2)
-          enp = nil
-        end
-      else
-        wtxt:set_txt('no more attacks!',2)
-      end
-
-    end
-
-  end
-
-  buttbuff = -1
-end
-
-function cmbt_act_drw()
-end
-
 function cmbt_upd()
 
-  -- get button input
-  if(buttbuff<0) buttbuff=getbutt()
-  -- no button input
-  if (buttbuff<0) return
-
--- menu selection
-  -- scroll through combat opts
-  if buttbuff<4 then
-    local d = dirx[buttbuff+1] | diry[buttbuff+1]
-    wsel.s=(wsel.s+d)%4
-  end
-
-  if buttbuff==5 then
-    if wsel.s == 0 then
-      wsel.state_draw = wsel_draw_action
-      g.upd = cmbt_act_upd
-      wtxt:set_txt("\151confirm\n\142back")
-    elseif wsel.s == 3 then
-      cmbt_end_turn()
-    end
-  end
-
-  buttbuff=-1
 end
 
 function cmbt_drw()
-  -- marching ants for attack select
-  -- only care about if we're in
-  -- attack mode
-  if g.upd==cmbt_atk_upd then
-    for i,e in ipairs(ens) do
-        ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
-    end
-  end
-
-  cmbt_state_drw()
 
   -- hp info
   local x,y,w,h = 70,80,128-76,20
@@ -613,75 +660,6 @@ function cmbt_drw()
   y+=6
   oline(x,y,x+w,y,0,7)
   oline(x+w,y-24,x+w,y,0,7)
-end
-
--- loops while we are running through
--- combat motion
-function cmbt_move_upd()
-
-  wtxt:set_txt(pcurr.name.." is on the move! \151confirm\n\142back")
-  wmvtxt:set_txt(5*(pcurr.stats.mvmt - #pcurr.tail))
-
-  if (buttbuff<0) buttbuff=getbutt()
-  if (buttbuff<0) return
-
-  local atype
-  -- listen for arrow keys to move
-  if buttbuff>=0 and buttbuff<4 then
-    local di,dj=dirx[buttbuff+1],diry[buttbuff+1]
-    if can_move(pcurr,di,dj) and
-        pcurr.atype=='none' then
-      if g.drw == cmbt_drw then
-        track_tail(pcurr,di,dj)
-      end
-      atype = 'walk'
-    else
-      atype = 'bump'
-    end
-    pcurr:set_tween(pcurr.x+8*di,pcurr.y+8*dj,.25,atype)
-  end
-
-  -- motion state exit
-  if buttbuff>=4 then
-    wsel.hide = false
-    wtxt:set_txt()
-    if buttbuff == 4 then
-      g.upd = cmbt_act_upd
-      wsel.state_draw = wsel_draw_action
-      wtxt:set_txt("\151confirm\n\142back")
-    else
-      g.upd = cmbt_upd
-      wsel.state_draw = wsel_draw_root
-      wsel.s=0
-    end
-  end
-  buttbuff=-1
-end
-
--- loops while we are handling combat attack
-function cmbt_atk_upd()
-  wtxt:set_txt("❎confirm\n🅾️back")
-
-  if (buttbuff<0) buttbuff=getbutt()
-  if (buttbuff<0) return
-
-  -- cycle through enemies
-  -- within range
-  if buttbuff==2 or buttbuff==3 then
-    enp+=diry[buttbuff+1]
-    enp=enp%#ens
-  end
-
-  if buttbuff==4 then
-    -- cancel
-    g.upd = cmbt_upd
-  elseif buttbuff==5 then
-    -- complete attack
-    attack(pcurr,ens[enp+1])
-    g.upd=cmbt_upd
-  end
-
-  buttbuff=-1
 end
 
 function cmbt_end_turn()
@@ -719,10 +697,12 @@ end
 -- to actor def 
 -- TODO: lots of chances for 
 -- token optimization
-function attack(atk,def)
+function attack(atk,def,atk_idx)
+  -- default attack is the first one
+  atk_idx = atk_idx or 1
   local def_x,def_y=def.x,def.y
   local astats,dstats = atk.stats,def.stats
-  local a = atk.acts[wsel.s+1]
+  local a = atk.acts[atk_idx+1]
 
   -- set animation stuff
   atk:set_tween(def_x,def_y,0.2,'bump')
@@ -1143,7 +1123,9 @@ end
 -- quick loop to return any btnp
 -- or importantly let us know 
 -- that nothing was pressed
-function getbutt()
+-- write to global key
+-- gets called once per update
+function checkKeyPressed()
   for i=0,5 do
     if (btnp(i)) then
       return i
@@ -1228,9 +1210,10 @@ end
 -- if h is specified
 function text_box(s,x,y,w,h,bc,ic,tc)
   s = s or "" -- string
+  if (type(s) ~= 'table') s = {s}
   w = w or 32  -- box width
-  local width, lines = fit_string(s,w-4)
-  h = h or 6*#lines -- box height
+  -- local width, lines = fit_string(s,w-4)
+  h = h or 32 -- box height
   x = x or 32  -- x position
   y = y or 32  -- y position
   ic = ic or 7 -- fill color
@@ -1238,8 +1221,8 @@ function text_box(s,x,y,w,h,bc,ic,tc)
   tc = tc or 0 -- text color
   draw_box(x,y,w,h,bc,ic)
   clip(x+2,y+2,w-4,h-4)
-  for i,line in ipairs(lines) do
-    ?line,x+2,y+2+6*(i-1),tc
+  for i,line in ipairs(s) do
+    ?line,x+6+36*((i-1)\2),y+4+10*((i-1)%2),tc
   end
   clip()
 end
@@ -1367,6 +1350,42 @@ end
 -- useful constants
 dirx={-1,1,0,0,1,1,-1,-1}
 diry={0,0,-1,1,-1,1,1,-1}
+
+-- HANDLERS
+function combatActionsClick()
+  local x,y,w,h=64,112,86,24
+  -- make action window
+  local actionWindow = Window:new('action',128-w,128-h,w,h,0,7)
+  actionWindow.handlers = {actionMoveClick}
+  function actionWindow:draw()
+    -- get action list of pcurr
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    for i, item in ipairs(self.items) do
+      ?item,self.x+6,self.y+2+5*(i-1),0
+    end
+    ?"\23",self.x+2,self.y+2+5*self.s,0
+  end
+  function actionWindow:update()
+    -- update action list from player
+    self.items = {}
+    for i, act in ipairs(pcurr.acts) do
+      add(self.items,act.name)
+    end
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+      local d = dirx[key+1] | diry[key+1]
+      self.s=(self.s+d)%#self.items
+    end
+    if (key == 4) then
+      windowStack:pop()
+    end
+    if (key == 5) then
+      windowStack:push(self.subWindows[self.s+1])
+    end
+  end
+  -- push action window
+  windowStack:push(actionWindow)
+end
 
 __gfx__
 000000000000000088e8800088e8800008e8880008e8880c00888e80c0888e800000000000000000000000000000000008e888000088000008e8880000880000
