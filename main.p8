@@ -500,7 +500,7 @@ function cmbt_ini()
   pcurr = chars[pturn]
 -- combat menu stack
   windowStack = WindowStack:new()
-  local x,y,w,h=64,112,86,24
+  local x,y,w,h=64,112,86,16
 
   -- ***** SELECTION MENU *****
   local selectionWindow = Window:new('selection',128-w,128-h,w,h,0,7)
@@ -512,22 +512,24 @@ function cmbt_ini()
   function selectionWindow:draw()
     draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
     for i, item in ipairs(self.items) do
-      ?item,self.x+6+36*((i-1)\2),self.y+4+10*((i-1)%2),0
+      ?item,self.x+6+36*((i-1)\2),self.y+2+7*((i-1)%2),0
     end
-    ?"\23",self.x+2+36*(self.s\2),self.y+4+10*(self.s%2),0
+    ?"\23",self.x+2+36*(self.s\2),self.y+2+7*(self.s%2),0
   end
   function selectionWindow:update()
-    if (key < 0) return
-    if (key >= 0 and key < 4) then
-      local d = dirx[key+1] | diry[key+1]
-      self.s=(self.s+d)%#self.items
-    end
-    if (key == 4) then
-      self.s=3 -- go to end
-    end
-    if (key == 5) then
+    local s = self.s
+    if key < 0 then
+      return
+    elseif key <= 1 then
+      s = (s+2*dirx[key+1])%4
+    elseif key <= 3 then
+      s = (s+diry[key+1])%2 + flr(s/2)*2
+    elseif key == 4 then
+      s = 3
+    elseif key == 5 then
       self.xHandler()
     end
+    self.s = s
   end
   windowStack:push(selectionWindow)
 
