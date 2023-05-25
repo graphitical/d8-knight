@@ -518,9 +518,8 @@ function cmbt_ini()
   end
   function selectionWindow:update()
     local s = self.s
-    if key < 0 then
-      return
-    elseif key <= 1 then
+    if (key < 0) return
+    if key <= 1 then
       s = (s+2*dirx[key+1])%4
     elseif key <= 3 then
       s = (s+diry[key+1])%2 + flr(s/2)*2
@@ -535,44 +534,7 @@ function cmbt_ini()
 
 
 
-  -- ***** MOVE MENU *****
-  local moveWindow = Window:new('move',128-w-60,128-h,w,h,0,7)
-  moveWindow.txt = {'on the move!'}
-  function moveWindow:draw()
-    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
-    ?self.txt[1],self.x+6,self.y+2,0
-  end
-  function moveWindow:update()
-    if (key < 0) return
-    if (key >= 0 and key < 4) then
-      local di,dj=dirx[key+1],diry[key+1]
-      local atype = 'bump'
-      if can_move(pcurr,di,dj) and
-          pcurr.atype=='none' then
-        if g.drw == cmbt_drw then
-          track_tail(pcurr,di,dj)
-        end
-        atype = 'walk'
-      end
-      pcurr:set_tween(pcurr.x+8*di,pcurr.y+8*dj,.25,atype)
-    end
-    if (key == 4 or key == 5) windowStack:pop()
-  end
 
-  -- ***** ATTACK MENU *****
-  local attackWindow = Window:new('attack',128-w,128-h,w,h,0,7)
-  attackWindow.txt = {'attack!'}
-  function attackWindow:draw()
-    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
-    ?self.txt[1],self.x+6,self.y+2,0
-  end
-  function attackWindow:update()
-    if (key < 0) return
-    if (key >= 0 and key < 4) then
-
-    end
-    if (key == 4 or key == 5) windowStack:pop()
-  end
 
   -- ***** SPECIAL MENU *****
   -- subwin = Window:new('special',128-w,128-h,w,h,0,7)
@@ -595,12 +557,6 @@ function cmbt_ini()
   -- watk = window:new('attack',128-w,128-h,w,h,0,7)
   -- watk.txt = {'attack!'}
 
-  -- function watk:draw()
-  --   window.draw(self)
-  --   for i,e in ipairs(ens) do
-  --       ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
-  --   end
-  -- end
   -- function watk:upd(bb)
   --   if (bb==4) then
   --     self:pop_self()
@@ -612,13 +568,6 @@ function cmbt_ini()
   --     self.txt = {'no more attacks :('}
   --     return
   --   else
-  --     ens = find_actors_in_range(pcurr,pcurr.acts[wact.s+1].rng,'en')
-  --     if #ens<=0 then
-  --       self.txt={'no enemies within range!'}
-  --       return
-  --     end
-  --     self.txt={#ens.." enemies in range"}
-  --     enp = 0
   --   end
 
   --   if bb==2 or bb==3 then
@@ -723,6 +672,20 @@ function attack(atk,def,atk_idx)
   else
     add(floats,float:new(":(",atk.x,atk.y,9))
     wtxt:set_txt(pcurr.name.." missed!",2)
+  end
+  astats.num_attacks-=1
+end
+
+function new_atk(attacker,defender,atk)
+  local astats,dstats = attacker.stats,defender.stats
+  local hit, crit = roll_atk(atk.to_hit, dstats.ac)
+  if hit then
+    local dmg = roll_dmg(atk.dmg,crit)
+    add(floats,float:new("-"..dmg,defender.x,defender.y,8))
+    dstats.hp-=dmg
+  else
+    add(floats,float:new(":(",attacker.x,attacker.y,9))
+    -- wtxt:set_txt(attacker.name.." missed!",2)
   end
   astats.num_attacks-=1
 end
@@ -1358,7 +1321,8 @@ function combatActionsClick()
   local x,y,w,h=64,112,86,24
   -- make action window
   local actionWindow = Window:new('action',128-w,128-h,w,h,0,7)
-  actionWindow.handlers = {actionMoveClick}
+  -- TODO: probably should populate this dynamically?
+  actionWindow.handlers = {actionMoveClick, actionAttackClick, actionAttackClick}
   function actionWindow:draw()
     -- get action list of pcurr
     draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
@@ -1382,13 +1346,73 @@ function combatActionsClick()
       windowStack:pop()
     end
     if (key == 5) then
-      windowStack:push(self.subWindows[self.s+1])
+      self.handlers[self.s+1](pcurr.acts[self.s+1])
     end
   end
   -- push action window
   windowStack:push(actionWindow)
 end
 
+function actionMoveClick()
+  local x,y,w,h=64,112,86,24
+  -- make move window
+  local moveWindow = Window:new('move',128-w,128-h,w,h,0,7)
+  moveWindow.txt = {'on the move!'}
+  function moveWindow:draw()
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    ?self.txt[1],self.x+6,self.y+2,0
+  end
+  function moveWindow:update()
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+      local di,dj=dirx[key+1],diry[key+1]
+      local atype = 'bump'
+      if can_move(pcurr,di,dj) and
+          pcurr.atype=='none' then
+        if g.drw == cmbt_drw then
+          track_tail(pcurr,di,dj)
+        end
+        atype = 'walk'
+      end
+      pcurr:set_tween(pcurr.x+8*di,pcurr.y+8*dj,.25,atype)
+    end
+    if (key == 4 or key == 5) windowStack:pop()
+  end
+  windowStack:push(moveWindow)
+end
+
+function actionAttackClick(atk)
+  local x,y,w,h=64,112,86,24
+  -- make attack window
+  local attackWindow = Window:new('attack',128-w,128-h,w,h,0,7)
+
+  -- update enemy list
+  ens = find_actors_in_range(pcurr,atk.rng,'en')
+  attackWindow.txt={#ens.." enemies in range\nfor attack\n"..atk.name}
+  enp = 0
+
+  function attackWindow:draw()
+    draw_box(self.x,self.y,self.w,self.h,self.bc,self.ic)
+    ?self.txt[1],self.x+6,self.y+2,0
+    for i,e in ipairs(ens) do
+        ants_box(e:i()*8-1,e:j()*8-1,9,9,7,i==(enp+1))
+    end
+  end
+
+  function attackWindow:update()
+    if (key < 0) return
+    if (key >= 0 and key < 4) then
+      local d = dirx[key+1] | diry[key+1]
+      enp=(enp+d)%#ens
+    end
+    if (key == 4) windowStack:pop()
+    if (key == 5) then
+      new_atk(pcurr,ens[enp+1],atk)
+      windowStack:pop()
+    end
+  end
+  windowStack:push(attackWindow)
+end
 __gfx__
 000000000000000088e8800088e8800008e8880008e8880c00888e80c0888e800000000000000000000000000000000008e888000088000008e8880000880000
 000000000000000008ee880c08ee880008ee880c08ee8804c088ee804088ee800000000000000000000000000000000008ee880c08e8880008ee880c08e88800
